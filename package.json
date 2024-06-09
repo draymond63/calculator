@@ -19,6 +19,7 @@
 		"@tauri-apps/cli": "^1.5.14",
 		"svelte": "^4.2.7",
 		"svelte-check": "^3.6.0",
+		"svelte-mathquill": "^0.8.2",
 		"tslib": "^2.4.1",
 		"typescript": "^5.0.0",
 		"vite": "^5.0.3"

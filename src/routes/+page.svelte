@@ -1,16 +1,23 @@
 <script>
+	import { MathQuill } from 'svelte-mathquill';
 	import Graph from './Graph.svelte';
+
+	let latex = '';
+	const autoCommands = 'pi theta phi sqrt sum prod int';
+	const autoOperatorNames = 'sin cos tan log exp lim';
 </script>
 
 <section>
   	<h1>
-		Welcome to your new<br />SvelteKit app
+		Welcome to<br />Dansmos
 	</h1>
-	<Graph />
-
-	<h2>
-		try editing <strong>src/routes/+page.svelte</strong>
-	</h2>
+	
+	<MathQuill 
+		bind:latex="{latex}" 
+		config={({ autoCommands, autoOperatorNames })}
+	/>
+	<br />
+	<Graph equation="{latex}" />
 </section>
 
 <style>
