@@ -1,33 +1,39 @@
-use evalexpr::{eval_with_context, Value, context_map};
-use Value::{Float, Int};
+use evalexpr::{eval_with_context, Value, context_map, EvalexprError};
+use Value::Float;
 
-fn identify_latex_functions(input: &str) -> &str {
-    input.replace("{", "(").replace("}", ")")
+fn identify_latex_functions(input: String) -> String {
+    // input.replace("{", "(").replace("}", ")")
+    input // TODO
 }
 
-fn main() {
-    let input = "sin(0.5) + 3 * \\frac(4, 2) + avg(3, 4)";
-    // let input = identify_latex_functions(input);
 
-    let context = context_map! {
+fn compute(input: &String) -> Result<Value, EvalexprError> {
+    let input = identify_latex_functions(input.clone());
+    let allowed_functions = context_map! {
         "\\frac" => Function::new(|argument| {
             let arguments = argument.as_tuple()?;
-            Ok(Float(arguments[0].as_number()? / arguments[1].as_number()?))
+            let numerator = &arguments[0];
+            let denom = &arguments[1];
+            Ok(Float(numerator.as_number()? / denom.as_number()?))
         }),
         "sin" => Function::new(|argument| {
             Ok(Float(argument.as_number()?.sin()))
         }),
         "avg" => Function::new(|argument| {
-            let arguments = argument.as_tuple()?;
-
-            if let (Int(a), Int(b)) = (&arguments[0], &arguments[1]) {
-                Ok(Int((a + b) / 2))
-            } else {
-                Ok(Float((arguments[0].as_number()? + arguments[1].as_number()?) / 2.0))
+            let arguments = &argument.as_tuple()?;
+            let mut sum = 0.0;
+            for arg in arguments {
+                sum += arg.as_number()?;
             }
+            Ok(Float(sum / arguments.len() as f64))
         })
     }.unwrap();
 
-    let result = eval_with_context(input, &context).unwrap();
-    println!("{}", result);
+    return eval_with_context(&input, &allowed_functions);
+}
+
+fn main() {
+    let input = String::from("sin(0.5) + 3 * \\frac(4, 2) + avg(3, 4, 2)");
+
+    println!("{}", compute(&input).unwrap());
 }
