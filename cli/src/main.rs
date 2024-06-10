@@ -1,14 +1,15 @@
 use evalexpr::{eval_with_context, Value, context_map, EvalexprError};
 use Value::Float;
 
-fn identify_latex_functions(input: String) -> String {
-    // input.replace("{", "(").replace("}", ")")
-    input // TODO
+fn identify_latex_functions(input: &str) -> String {
+    input.replace("}{", ",")
+         .replace("{", "(")
+         .replace("}", ")")
 }
 
 
-fn compute(input: &String) -> Result<Value, EvalexprError> {
-    let input = identify_latex_functions(input.clone());
+fn compute(input: &str) -> Result<Value, EvalexprError> {
+    let input = identify_latex_functions(input);
     let allowed_functions = context_map! {
         "\\frac" => Function::new(|argument| {
             let arguments = argument.as_tuple()?;
@@ -33,7 +34,7 @@ fn compute(input: &String) -> Result<Value, EvalexprError> {
 }
 
 fn main() {
-    let input = String::from("sin(0.5) + 3 * \\frac(4, 2) + avg(3, 4, 2)");
+    let input = "sin(0.5) + 3 * \\frac{4}{2} + avg(3, 4, 2)";
 
-    println!("{}", compute(&input).unwrap());
+    println!("{}", compute(input).unwrap());
 }
