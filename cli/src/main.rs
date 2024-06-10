@@ -1,4 +1,4 @@
-use evalexpr::{eval_with_context, Value, context_map, EvalexprError};
+use evalexpr::{eval_with_context_mut, Value, context_map, EvalexprError};
 use Value::Float;
 
 fn identify_latex_functions(input: &str) -> String {
@@ -7,10 +7,11 @@ fn identify_latex_functions(input: &str) -> String {
          .replace("}", ")")
 }
 
-
-fn compute(input: &str) -> Result<Value, EvalexprError> {
-    let input = identify_latex_functions(input);
-    let allowed_functions = context_map! {
+fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
+    let inputs = inputs.into_iter()
+                        .map(identify_latex_functions)
+                        .collect::<Vec<String>>();
+    let mut context = context_map! {
         "\\frac" => Function::new(|argument| {
             let arguments = argument.as_tuple()?;
             let numerator = &arguments[0];
@@ -30,11 +31,21 @@ fn compute(input: &str) -> Result<Value, EvalexprError> {
         })
     }.unwrap();
 
-    return eval_with_context(&input, &allowed_functions);
+    let mut results: Vec<Value> = Vec::new();
+    for input in inputs.iter() {
+        results.push(eval_with_context_mut(input, &mut context).unwrap());
+    }
+    Ok(results)
 }
 
 fn main() {
-    let input = "sin(0.5) + 3 * \\frac{4}{2} + avg(3, 4, 2)";
+    let inputs = vec![
+        "a = 1/2",
+        "sin(a) + \\frac{a}{2}"
+    ];
 
-    println!("{}", compute(input).unwrap());
+    let results = compute(inputs).unwrap();
+    for result in results {
+        println!("{}", result);
+    }
 }
