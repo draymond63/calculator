@@ -1,4 +1,4 @@
-use evalexpr::{build_operator_tree, context_map, eval_with_context_mut, ContextWithMutableFunctions, EvalexprError, Function, Value};
+use evalexpr::{build_operator_tree, context_map, eval_with_context_mut, ContextWithMutableFunctions, ContextWithMutableVariables, EvalexprError, Function, HashMapContext, Value};
 use Value::Float;
 use regex::Regex;
 
@@ -9,7 +9,7 @@ fn identify_latex_functions(input: &str) -> String {
 }
 
 
-fn compile_user_function(input: &String) -> Option<(String, Function)> {
+fn compile_user_function(input: &String, global_context: &HashMapContext) -> Option<(String, Function)> {
     let re = Regex::new(r"^([a-zA-Z]+)\(([^)]+)\)\s*=").unwrap();
     let captures = re.captures(input)?;
 
@@ -20,12 +20,12 @@ fn compile_user_function(input: &String) -> Option<(String, Function)> {
         let equation = &input[full_capture.len()..];
         // let arguments = arguments.split(",").collect::<Vec<&str>>();
         let precompiled = build_operator_tree(equation).unwrap();
+        let context = global_context.clone();
+        println!("Context: {:?}", context);
 
         let equation = Function::new(move |argument: &Value| {
-            let context = context_map! {
-                arg_var.clone() => argument.clone()
-            }?;
-            println!("{arg_var} = {argument}");
+            let mut context = context.to_owned();
+            context.set_value(arg_var.clone(), argument.clone())?;
             precompiled.eval_with_context(&context)
         });
         Some((function_name, equation))
@@ -34,26 +34,8 @@ fn compile_user_function(input: &String) -> Option<(String, Function)> {
     }
 }
 
-fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
-    let mut inputs = inputs.into_iter()
-                        .map(identify_latex_functions)
-                        .collect::<Vec<String>>();
-    let user_funcs = inputs.iter()
-                           .map(compile_user_function)
-                           .collect::<Vec<Option<(String, Function)>>>();
-    let user_func_indices = user_funcs.iter()
-                                      .enumerate()
-                                      .filter(|(_, x)| x.is_some())
-                                      .map(|(i, _)| i)
-                                      .collect::<Vec<usize>>();
-    
-    let user_funcs = user_funcs.into_iter()
-                                 .filter(|x| x.is_some())
-                                 .map(|x| x.unwrap())
-                                 .collect::<Vec<(String, Function)>>();
-
-    println!("Funcs: {:?}", user_funcs);
-    let mut context = context_map! {
+fn get_base_context() -> HashMapContext {
+    context_map! {
         "\\frac" => Function::new(|argument| {
             let arguments = argument.as_tuple()?;
             let numerator = &arguments[0];
@@ -71,15 +53,32 @@ fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
             }
             Ok(Float(sum / arguments.len() as f64))
         }),
-    }.unwrap();
+    }.unwrap()
+}
 
-    // Add user functions to context
-    for (name, function) in user_funcs {
-        context.set_function(name, function)?;
+fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
+    let mut context = get_base_context();
+
+    let mut inputs = inputs.into_iter()
+                        .map(identify_latex_functions)
+                        .collect::<Vec<String>>();
+
+    let mut user_func_indices: Vec<usize> = Vec::new();
+    for (i, input) in inputs.iter().enumerate() {
+        let user_func = compile_user_function(input, &context);
+        if user_func.is_some() {
+            let (name, function) = user_func.unwrap();
+            println!("Adding function: {}", name);
+            context.set_function(name, function)?;
+            user_func_indices.push(i);
+        }
     }
+    user_func_indices.reverse();
     for i in user_func_indices {
+        println!("Removing: {}", i);
         inputs.remove(i);
     }
+    println!("Inputs: {:?}", inputs);
 
     let mut results: Vec<Value> = Vec::new();
     for input in inputs.iter() {
@@ -90,11 +89,12 @@ fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
 
 fn main() {
     let inputs = vec![
-        "a = 0.5",
+        "a = 3",
+        "b = 2",
         "f(x) = x^3",
-        "f(a)",
+        "g(x) = 2 + \\frac{f(x)}{2}",
+        "g(a)",
     ];
-
     let results = compute(inputs).unwrap();
     println!("Results: {:?}", results);
 }
