@@ -1,13 +1,13 @@
 use evalexpr::{build_operator_tree, context_map, eval_with_context_mut, ContextWithMutableFunctions, ContextWithMutableVariables, EvalexprError, Function, HashMapContext, Value};
-use Value::Float;
+use Value::{Float, Empty};
 use regex::Regex;
+
 
 fn identify_latex_functions(input: &str) -> String {
     input.replace("}{", ",")
          .replace("{", "(")
          .replace("}", ")")
 }
-
 
 fn compile_user_function(input: &String, global_context: &mut HashMapContext) -> bool {
     let re = Regex::new(r"^([a-zA-Z]+)\(([^)]+)\)\s*=").unwrap();
@@ -36,6 +36,14 @@ fn compile_user_function(input: &String, global_context: &mut HashMapContext) ->
         true
     } else {
         false
+    }
+}
+
+fn evaluate_expression(input: &String, context: &mut HashMapContext) -> Result<Value, EvalexprError> {
+    if compile_user_function(input, context) {
+        Ok(Empty)
+    } else {
+        eval_with_context_mut(input, context)
     }
 }
 
@@ -68,12 +76,9 @@ fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
                         .map(identify_latex_functions)
                         .collect::<Vec<String>>();
 
-    let mut results: Vec<Value> = Vec::new();
-    for input in inputs.iter() {
-        if !compile_user_function(input, &mut context) {
-            results.push(eval_with_context_mut(input, &mut context).unwrap());
-        }
-    }
+    let results = inputs.into_iter()
+                        .map(|input| evaluate_expression(&input, &mut context))
+                        .collect::<Result<Vec<Value>, EvalexprError>>()?;
     Ok(results)
 }
 
