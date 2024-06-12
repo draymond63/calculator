@@ -9,9 +9,14 @@ fn identify_latex_functions(input: &str) -> String {
 }
 
 
-fn compile_user_function(input: &String, global_context: &HashMapContext) -> Option<(String, Function)> {
+fn compile_user_function(input: &String, global_context: &mut HashMapContext) -> bool {
     let re = Regex::new(r"^([a-zA-Z]+)\(([^)]+)\)\s*=").unwrap();
-    let captures = re.captures(input)?;
+    let captures = re.captures(input);
+
+    if captures.is_none() {
+        return false;
+    }
+    let captures = captures.unwrap();
 
     if captures.len() == 3 {
         let full_capture = &captures[0];
@@ -21,16 +26,16 @@ fn compile_user_function(input: &String, global_context: &HashMapContext) -> Opt
         // let arguments = arguments.split(",").collect::<Vec<&str>>();
         let precompiled = build_operator_tree(equation).unwrap();
         let context = global_context.clone();
-        println!("Context: {:?}", context);
 
-        let equation = Function::new(move |argument: &Value| {
+        let function = Function::new(move |argument: &Value| {
             let mut context = context.to_owned();
             context.set_value(arg_var.clone(), argument.clone())?;
             precompiled.eval_with_context(&context)
         });
-        Some((function_name, equation))
+        global_context.set_function(function_name, function).unwrap();
+        true
     } else {
-        None
+        false
     }
 }
 
@@ -59,30 +64,15 @@ fn get_base_context() -> HashMapContext {
 fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
     let mut context = get_base_context();
 
-    let mut inputs = inputs.into_iter()
+    let inputs = inputs.into_iter()
                         .map(identify_latex_functions)
                         .collect::<Vec<String>>();
 
-    let mut user_func_indices: Vec<usize> = Vec::new();
-    for (i, input) in inputs.iter().enumerate() {
-        let user_func = compile_user_function(input, &context);
-        if user_func.is_some() {
-            let (name, function) = user_func.unwrap();
-            println!("Adding function: {}", name);
-            context.set_function(name, function)?;
-            user_func_indices.push(i);
-        }
-    }
-    user_func_indices.reverse();
-    for i in user_func_indices {
-        println!("Removing: {}", i);
-        inputs.remove(i);
-    }
-    println!("Inputs: {:?}", inputs);
-
     let mut results: Vec<Value> = Vec::new();
     for input in inputs.iter() {
-        results.push(eval_with_context_mut(input, &mut context).unwrap());
+        if !compile_user_function(input, &mut context) {
+            results.push(eval_with_context_mut(input, &mut context).unwrap());
+        }
     }
     Ok(results)
 }
@@ -92,7 +82,7 @@ fn main() {
         "a = 3",
         "b = 2",
         "f(x) = x^3",
-        "g(x) = 2 + \\frac{f(x)}{2}",
+        "g(x) = 2 + f(x)/b",
         "g(a)",
     ];
     let results = compute(inputs).unwrap();
