@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 evalexpr = "11.3.0"
 regex = "1.10.5"
+uom = "0.36.0"

@@ -3,13 +3,13 @@ use Value::{Float, Empty};
 use regex::Regex;
 
 
-fn identify_latex_functions(input: &str) -> String {
+fn replace_latex_functions(input: &str) -> String {
     input.replace("}{", ",")
          .replace("{", "(")
          .replace("}", ")")
 }
 
-fn compile_user_function(input: &String, global_context: &mut HashMapContext) -> bool {
+fn eval_user_function(input: &String, global_context: &mut HashMapContext) -> bool {
     let re = Regex::new(r"^([a-zA-Z]+)\(([^)]+)\)\s*=").unwrap();
     let captures = re.captures(input);
 
@@ -20,37 +20,40 @@ fn compile_user_function(input: &String, global_context: &mut HashMapContext) ->
 
     if captures.len() == 3 {
         let full_capture = &captures[0];
-        let function_name = String::from(&captures[1]);
-        let arg_str = &captures[2];        
+        let function_name = &captures[1];
+        let arg_str = &captures[2];
         let equation = &input[full_capture.len()..];
-        let arg_vars = arg_str.split(",")
-                        .map(|s| s.trim().to_string())
-                        .collect::<Vec<String>>();
-        let precompiled = build_operator_tree(equation).unwrap();
-        let context = global_context.clone();
-
-        let function = Function::new(move |argument: &Value| {
-            let mut context = context.to_owned();
-            let arguments = if argument.is_tuple() { argument.as_tuple()? } else { vec![argument.clone()] };
-
-            if arguments.len() != arg_vars.len() {
-                return Err(EvalexprError::wrong_function_argument_amount(arguments.len(), arg_vars.len()));
-            }
-            for (i, arg) in arguments.iter().enumerate() {
-                context.set_value(arg_vars[i].to_string(), arg.clone()).unwrap();
-            }
-
-            precompiled.eval_with_context(&context)
-        });
-        global_context.set_function(function_name, function).unwrap();
+        let function = compile_function(arg_str, equation, global_context);
+        global_context.set_function(function_name.to_string(), function).unwrap();
         true
     } else {
-        false
+        false // TODO: Should be an error
     }
 }
 
-fn evaluate_expression(input: &String, context: &mut HashMapContext) -> Result<Value, EvalexprError> {
-    if compile_user_function(input, context) {
+fn compile_function(arg_str: &str, equation: &str, global_context: &mut HashMapContext) -> Function {
+    let arg_vars = arg_str.split(",")
+                    .map(|s| s.trim().to_string())
+                    .collect::<Vec<String>>();
+    let precompiled = build_operator_tree(equation).unwrap();
+    let context = global_context.clone();
+
+    Function::new(move |argument: &Value| {
+        let mut context = context.to_owned();
+        let arguments = if argument.is_tuple() { argument.as_tuple()? } else { vec![argument.clone()] };
+        if arguments.len() != arg_vars.len() {
+            return Err(EvalexprError::wrong_function_argument_amount(arguments.len(), arg_vars.len()));
+        }
+        for (i, arg) in arguments.iter().enumerate() {
+            context.set_value(arg_vars[i].to_string(), arg.clone()).unwrap();
+        }
+        precompiled.eval_with_context(&context)
+    })
+}
+
+fn evaluate_expression(input: &str, context: &mut HashMapContext) -> Result<Value, EvalexprError> {
+    let input = &replace_latex_functions(input);
+    if eval_user_function(input, context) {
         Ok(Empty)
     } else {
         eval_with_context_mut(input, context)
@@ -82,21 +85,17 @@ fn get_base_context() -> HashMapContext {
 fn compute(inputs: Vec<&str>) -> Result<Vec<Value>, EvalexprError> {
     let mut context = get_base_context();
 
-    let inputs = inputs.into_iter()
-                        .map(identify_latex_functions)
-                        .collect::<Vec<String>>();
-
     let results = inputs.into_iter()
-                        .map(|input| evaluate_expression(&input, &mut context))
-                        .collect::<Result<Vec<Value>, EvalexprError>>()?;
+                        .map(|input| evaluate_expression(input, &mut context))
+                        .collect::<Result<_, _>>()?;
     Ok(results)
 }
 
 fn main() {
     let inputs = vec![
-        "a = 3",
+        "a = 16",
         "b = 2",
-        "f(x, y) = x^3 + y",
+        "f(x, y) = x / y^2",
         "g(x) = f(x, b)",
         "g(a)",
     ];
