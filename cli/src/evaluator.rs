@@ -4,30 +4,14 @@ use crate::types::{
     Context,
 };
 
-pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> Result<f32, String> {
+pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> Result<Option<f32>, String> {
     eval_mut_context_def(expr, &mut context, None)
 }
 
-fn eval_mut_context_def(expr: Expr, mut context: &mut Context, defining: Option<&str>) -> Result<f32, String> {
+fn eval_mut_context_def(expr: Expr, mut context: &mut Context, defining: Option<&str>) -> Result<Option<f32>, String> {
     match expr {
-        ENum(num) => Ok(num),
-        EAdd(expr1, expr2) => Ok(eval_mut_context_def(*expr1, &mut context, defining)? + eval_mut_context_def(*expr2, &mut context, defining)?),
-        ESub(expr1, expr2) => Ok(eval_mut_context_def(*expr1, &mut context, defining)? - eval_mut_context_def(*expr2, &mut context, defining)?),
-        EMul(expr1, expr2) => Ok(eval_mut_context_def(*expr1, &mut context, defining)? * eval_mut_context_def(*expr2, &mut context, defining)?),
-        EDiv(expr1, expr2) => Ok(eval_mut_context_def(*expr1, &mut context, defining)? / eval_mut_context_def(*expr2, &mut context, defining)?),
-        EExp(expr1, expr2) => Ok(eval_mut_context_def(*expr1, &mut context, defining)?.powf(eval_mut_context_def(*expr2, &mut context, defining)?)),
-        EVar(var) => {
-            if defining.is_some() && var == defining.unwrap() {
-                return Err(format!("Variable '{var}' cannot be defined recursively"))
-            } else if let Some(val) = context.vars.get(&var) {
-                Ok(*val)
-            } else {
-                Err(format!("Variable '{var}' not defined"))
-            }
-        },
-        // EFunc(_, _) => panic!("Function not implemented"),
         EDefVar(var, expr) => {
-            let result = eval_mut_context_def(*expr, &mut context, Some(&var))?;
+            let result = eval_mut_context_def(*expr, &mut context, Some(&var))?.unwrap();
             if defining.is_some() {
                 return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", var, defining.unwrap()));
             }
@@ -35,16 +19,65 @@ fn eval_mut_context_def(expr: Expr, mut context: &mut Context, defining: Option<
                 return Err(format!("Variable '{var}' already defined"));
             }
             context.vars.insert(var, result);
-            Ok(result)
+            Ok(None)
         }
-        // EDefFunc(_, _, _) => panic!("Function not implemented"),
+        EDefFunc(name, params, expr) => {
+            if defining.is_some() {
+                return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", name, defining.unwrap()));
+            }
+            if context.funcs.contains_key(&name) {
+                return Err(format!("Variable '{name}' already defined"));
+            }
+            context.funcs.insert(name, (params, *expr));
+            Ok(None)
+        },
+        _ => eval_expr(expr, &context, defining),
     }
 }
+
+fn eval_expr(expr: Expr, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String> {
+    match expr {
+        ENum(num) => Ok(Some(num)),
+        EAdd(expr1, expr2) => Ok(Some(eval_expr(*expr1, &context, defining)?.unwrap() + eval_expr(*expr2, &context, defining)?.unwrap())),
+        ESub(expr1, expr2) => Ok(Some(eval_expr(*expr1, &context, defining)?.unwrap() - eval_expr(*expr2, &context, defining)?.unwrap())),
+        EMul(expr1, expr2) => Ok(Some(eval_expr(*expr1, &context, defining)?.unwrap() * eval_expr(*expr2, &context, defining)?.unwrap())),
+        EDiv(expr1, expr2) => Ok(Some(eval_expr(*expr1, &context, defining)?.unwrap() / eval_expr(*expr2, &context, defining)?.unwrap())),
+        EExp(expr1, expr2) => Ok(Some(eval_expr(*expr1, &context, defining)?.unwrap().powf(eval_expr(*expr2, &context, defining)?.unwrap()))),
+        EVar(var) => {
+            if defining.is_some() && var == defining.unwrap() {
+                return Err(format!("Variable '{var}' cannot be defined recursively"))
+            } else if let Some(val) = context.vars.get(&var) {
+                Ok(Some(*val))
+            } else {
+                Err(format!("Variable '{var}' not defined"))
+            }
+        },
+        EFunc(name, inputs) => {
+            if defining.is_some() && name == defining.unwrap() {
+                return Err(format!("Function '{name}' cannot be defined recursively"))
+            } else if let Some((params, func_def)) = context.funcs.get(&name) {
+                if params.len() != inputs.len() {
+                    return Err(format!("Function '{}' expects {} arguments, but got {}", name, params.len(), inputs.len()));
+                }
+                let mut eval_context = context.clone();
+
+                for (param, input) in params.iter().zip(inputs.iter()) {
+                    eval_context.vars.insert(param.clone(), eval_expr(input.clone(), context, defining)?.unwrap());
+                }
+                eval_mut_context_def(func_def.clone(), &mut eval_context, defining)
+            } else {
+                Err(format!("Function '{name}' not defined"))
+            }
+        },
+        _ => Err(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_mut_context_def`?")),
+    }
+}
+
 
 #[cfg(test)]
 pub(crate) fn evaluate(expr: Expr) -> f32 {
     let mut context = Context::new();
-    eval_mut_context(expr, &mut context).unwrap()
+    eval_mut_context(expr, &mut context).unwrap().unwrap()
 }
 
 #[cfg(test)]

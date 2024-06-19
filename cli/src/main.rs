@@ -17,32 +17,22 @@ mod types;
 
 
 
-fn evaluate(inputs: Vec<&str>) -> Result<Vec<f32>, Box<dyn Error>> {
+fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<f32>>, Box<dyn Error>> {
     let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
     let mut context = Context::new();
-    let mut results = vec![0.0; inputs.len()];
+    let mut results = vec![None; inputs.len()];
 
     for (i, input) in inputs.into_iter().enumerate() {        
         let line_num: u32 = (i + 1).try_into().unwrap();
         let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
-        let result = parse(line);
-
-        let expr = match result {
-            Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-                return Err(format!("Failed to parse: {:?}", e).into());
-            }
-            Ok((_, expr)) => expr,
-            k => {
-                panic!("Unexpected parse error {:?}", k);
-            }
-        };
+        let (_, expr) = parse(line).unwrap();
 
         let eval = eval_mut_context(expr, &mut context);
         if eval.is_err() {
             return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
         }
         results[i] = eval.unwrap();
-        println!("{} = {}", input, results[i])
+        println!("{} = {:#?}", input, results[i])
     }
     Ok(results)
 }

@@ -10,7 +10,7 @@ pub fn start_alpha<'a>(input: Span<'a>) -> ParseResultStr<'a> {
     if first.fragment().starts_with(|c: char| c.is_alphabetic()) {
         Ok((input, first))
     } else {
-        Err(nom::Err::Failure(ParseError::new("Expected alphabetic character", first)))
+        Err(nom::Err::Error(ParseError::new("Expected alphabetic character", first)))
     }
 }
 

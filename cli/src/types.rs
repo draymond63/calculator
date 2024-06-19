@@ -3,21 +3,21 @@ use nom;
 use nom_locate::LocatedSpan;
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     ENum(f32),
     EVar(String),
-    // EFunc(String, Vec<Expr>),
+    EFunc(String, Vec<Expr>),
     EAdd(Box<Expr>, Box<Expr>),
     ESub(Box<Expr>, Box<Expr>),
     EMul(Box<Expr>, Box<Expr>),
     EDiv(Box<Expr>, Box<Expr>),
     EExp(Box<Expr>, Box<Expr>),
     EDefVar(String, Box<Expr>),
-    // EDefFunc(String, Vec<String>, Box<Expr>),
+    EDefFunc(String, Vec<String>, Box<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Context {
     pub vars: HashMap<String, f32>,
     pub funcs: HashMap<String, (Vec<String>, Expr)>,
@@ -34,8 +34,10 @@ impl Context {
 
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-pub type ParseResult<'a> = nom::IResult<Span<'a>, Expr, ParseError<'a>>;
-pub type ParseResultStr<'a> = nom::IResult<Span<'a>, Span<'a>, ParseError<'a>>;
+type BaseParseResult<'a, T> = nom::IResult<Span<'a>, T, ParseError<'a>>;
+pub type ParseResult<'a> = BaseParseResult<'a, Expr>;
+pub type ParseResultStr<'a> = BaseParseResult<'a, Span<'a>>;
+pub type ParseResultVec<'a> = BaseParseResult<'a, Vec<Expr>>;
 
 
 
