@@ -1,15 +1,14 @@
 use crate::{
     evaluator::eval_mut_context,
-    types::Context,
+    types::{Context, Span},
     parser::parse,
 };
-
-use nom::error::convert_error;
 
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::result::Result;
+use std::convert::TryInto;
 
 mod evaluator;
 mod parser;
@@ -22,12 +21,14 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<f32>, Box<dyn Error>> {
     let mut context = Context::new();
     let mut results = vec![0.0; inputs.len()];
 
-    for (i, input) in inputs.into_iter().enumerate() {
-        let result = parse(&input);
+    for (i, input) in inputs.into_iter().enumerate() {        
+        let line_num: u32 = (i + 1).try_into().unwrap();
+        let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
+        let result = parse(line);
 
         let expr = match result {
             Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-                panic!("Could not parse - {}", convert_error(input, e));
+                return Err(format!("Failed to parse: {:?}", e).into());
             }
             Ok((_, expr)) => expr,
             k => {
@@ -37,7 +38,7 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<f32>, Box<dyn Error>> {
 
         let eval = eval_mut_context(expr, &mut context);
         if eval.is_err() {
-            return Err(format!("Error in line {}: {:?}", i + 1, eval.unwrap_err()).into());
+            return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
         }
         results[i] = eval.unwrap();
         println!("{} = {}", input, results[i])

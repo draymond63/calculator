@@ -1,100 +1,106 @@
-use crate::types::Expr;
-use crate::types::Expr::*;
+use crate::types::{
+    Expr,
+    Expr::*,
+    ParseResult,
+    ParseResultStr,
+    ParseError,
+    Span,
+};
 
 use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0, alphanumeric1};
-use nom::combinator::map;
+use nom::combinator::{map, cut};
 use nom::multi::many0;
 use nom::sequence::{delimited, tuple, pair};
-use nom::IResult;
-use nom::error::{context, VerboseError, ParseError};
 
 use std::str::FromStr;
 
 
-pub type ParseResult<'a> = IResult<&'a str, Expr, VerboseError<&'a str>>; 
 
-pub(crate) fn parse<'a>(input: &'a str) -> ParseResult<'a> {
-    let (input, expr) = raise_err_to_failure(parse_math_expr_or_def(input))?;
+pub(crate) fn parse<'a>(input: Span<'a>) -> ParseResult<'a> {
+    let (input, expr) = cut(parse_math_expr_or_def)(input)?;
     if !input.is_empty() {
-        return Err(nom::Err::Failure(VerboseError::from_error_kind(input, nom::error::ErrorKind::Eof)));
+        return Err(nom::Err::Failure(ParseError::new("Unexpected input".to_string(), input)));
     }
-    Ok(("", expr))
+    Ok(("".into(), expr))
 }
 
-fn parse_math_expr_or_def<'a>(input: &'a str) -> ParseResult<'a> {
-    let (input, expr) = alt((context("definition line", parse_def), context("expression line", parse_math_expr)))(input)?;
+fn parse_math_expr_or_def<'a>(input: Span<'a>) -> ParseResult<'a> {
+    let (input, expr) = alt((parse_def, parse_math_expr))(input)?;
     Ok((input, expr))
 }
 
-fn parse_def<'a>(input: &'a str) -> ParseResult<'a> {
-    let (input, var) = delimited(space0, alphanumeric1, space0)(input)?;
+fn parse_def<'a>(input: Span<'a>) -> ParseResult<'a> {
+    let (input, var) = delimited(space0, start_alpha, space0)(input)?;
     let (input, _) = char('=')(input)?;
     let (input, _) = space0(input)?;
-    let (input, expr) = raise_err_to_failure(parse_math_expr(input))?;
+    let (input, expr) = cut(parse_math_expr)(input)?;
     Ok((input, EDefVar(var.to_string(), Box::new(expr))))
 }
 
-fn raise_err_to_failure<'a>(result: ParseResult<'a>) -> ParseResult<'a> {
-    match result {
-        Ok((input, result)) => Ok((input, result)),
-        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-            return Err(nom::Err::Failure(e));
-        }
-        Err(e) => panic!("Unexpected parse error: {:?}", e),
+fn start_alpha<'a>(input: Span<'a>) -> ParseResultStr<'a> {
+    let (input, first) = alphanumeric1(input)?;
+    if first.fragment().starts_with(|c: char| c.is_alphabetic()) {
+        Ok((input, first))
+    } else {
+        Err(nom::Err::Failure(ParseError::new("Expected alphabetic character".to_string(), first)))
     }
 }
 
-fn parse_math_expr<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_math_expr<'a>(input: Span<'a>) -> ParseResult<'a> {
     let (input, num1) = parse_term(input)?;
-    let term_splitters = alt((context("add", char('+')), context("subtract", char('-')))); 
+    let term_splitters = alt((char('+'), char('-'))); 
     let (input, exprs) = many0(tuple((term_splitters, parse_term)))(input)?;
     Ok((input, map_ops(num1, exprs)))
 }
 
-fn parse_term<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_term<'a>(input: Span<'a>) -> ParseResult<'a> {
     let (input, num1) = parse_factor(input)?;
-    let term_splitters = alt((context("divide", char('/')), context("multiply", char('*')))); 
-    let (input, exprs) = many0(tuple((term_splitters, context("exponent", parse_factor))))(input)?;
+    let term_splitters = alt((char('/'), char('*'))); 
+    let (input, exprs) = many0(tuple((term_splitters, parse_factor)))(input)?;
     Ok((input, map_ops(num1, exprs)))
 }
 
-fn parse_factor<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_factor<'a>(input: Span<'a>) -> ParseResult<'a> {
     let (input, num1) = parse_insides(input)?;
-    let (input, exprs) = many0(tuple((char('^'), context("exponent", parse_factor))))(input)?;
+    let (input, exprs) = many0(tuple((char('^'), parse_factor)))(input)?;
     Ok((input, map_ops(num1, exprs)))
 }
 
-fn parse_insides<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_insides<'a>(input: Span<'a>) -> ParseResult<'a> {
     alt((parse_parens, parse_implicit_multiply, parse_number, parse_var_use))(input)
 }
 
-fn parse_implicit_multiply<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_implicit_multiply<'a>(input: Span<'a>) -> ParseResult<'a> {
     let (input, (num, var)) = pair(parse_number, alt((parse_parens, parse_var_use)))(input)?;
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
 
-fn parse_number<'a>(input: &'a str) -> ParseResult<'a> {
-    map(delimited(space0, context("number", digit1), space0), parse_enum)(input)
+fn parse_number<'a>(input: Span<'a>) -> ParseResult<'a> {
+    map(delimited(space0, digit1, space0), parse_enum)(input)
 }
 
-fn parse_enum(parsed_num: &str) -> Expr {
-    let num = f32::from_str(parsed_num).unwrap();
+fn parse_enum(parsed_num: Span) -> Expr {
+    let num = f32::from_str(parsed_num.fragment()).unwrap();
     ENum(num)
 }
 
-fn parse_var_use<'a>(input: &'a str) -> ParseResult<'a> {
-    map(delimited(space0, context("variable", alphanumeric1), space0), parse_evar)(input)
+fn parse_var_use<'a>(input: Span<'a>) -> ParseResult<'a> {
+    map(delimited(space0, start_alpha, space0), parse_evar)(input)
 }
 
-fn parse_evar(input: &str) -> Expr {
-    EVar(input.to_string())
+fn parse_evar<'a>(input: Span<'a>) -> Expr {
+    match *input.fragment() {
+        "e" => ENum(std::f32::consts::E),
+        "pi" => ENum(std::f32::consts::PI),
+        _ => EVar(input.to_string()),
+    }
 }
 
-fn parse_parens<'a>(input: &'a str) -> ParseResult<'a> {
+fn parse_parens<'a>(input: Span<'a>) -> ParseResult<'a> {
     delimited(
         space0,
-        delimited(char('('), context("brackets", parse_math_expr), char(')')), // This is the recursive call
+        delimited(char('('), parse_math_expr, char(')')), // This is the recursive call
         space0,
     )(input)
 }
@@ -123,21 +129,21 @@ mod tests {
 
     #[test]
     fn parse_add_statement() {
-        let (_, parsed) = parse("12 + 34").unwrap();
+        let (_, parsed) = parse("12 + 34".into()).unwrap();
         let expected = EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_subtract_statement() {
-        let (_, parsed) = parse("12 - 34").unwrap();
+        let (_, parsed) = parse("12 - 34".into()).unwrap();
         let expected = ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_nested_add_sub_statements() {
-        let (_, parsed) = parse("12 - 34 + 15 - 9").unwrap();
+        let (_, parsed) = parse("12 - 34 + 15 - 9".into()).unwrap();
         let expected = ESub(
             Box::new(EAdd(
                 Box::new(ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)))),
@@ -150,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_parse_multi_level_expression() {
-        let (_, parsed) = parse("1 * 2 + 3 / 4 ^ 6").unwrap();
+        let (_, parsed) = parse("1 * 2 + 3 / 4 ^ 6".into()).unwrap();
         let expected = EAdd(
             Box::new(EMul(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
             Box::new(EDiv(
@@ -163,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_parse_expression_with_parantheses() {
-        let (_, parsed) = parse("(1 + 2) * 3").unwrap();
+        let (_, parsed) = parse("(1 + 2) * 3".into()).unwrap();
         let expected = EMul(
             Box::new(EAdd(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
             Box::new(ENum(3.0)),
