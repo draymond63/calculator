@@ -2,15 +2,17 @@ use crate::types::{
     Expr,
     Expr::*,
     ParseResult,
-    ParseResultStr,
     ParseError,
     Span,
 };
 
+use crate::parsing_helpers::{start_alpha, cut_with_message};
+
 use nom::branch::alt;
-use nom::character::complete::{char, digit1, space0, alphanumeric1};
+use nom::character::complete::{char, digit1, space0};
+use nom::bytes::complete::take_until;
 use nom::combinator::{map, cut};
-use nom::multi::many0;
+use nom::multi::{many0, many0_count};
 use nom::sequence::{delimited, tuple, pair};
 
 use std::str::FromStr;
@@ -20,7 +22,7 @@ use std::str::FromStr;
 pub(crate) fn parse<'a>(input: Span<'a>) -> ParseResult<'a> {
     let (input, expr) = cut(parse_math_expr_or_def)(input)?;
     if !input.is_empty() {
-        return Err(nom::Err::Failure(ParseError::new("Unexpected input".to_string(), input)));
+        return Err(nom::Err::Failure(ParseError::new("Unexpected input", input)));
     }
     Ok(("".into(), expr))
 }
@@ -31,20 +33,18 @@ fn parse_math_expr_or_def<'a>(input: Span<'a>) -> ParseResult<'a> {
 }
 
 fn parse_def<'a>(input: Span<'a>) -> ParseResult<'a> {
-    let (input, var) = delimited(space0, start_alpha, space0)(input)?;
+    let (input, name_side) = take_until("=")(input)?;
+    if name_side.contains('(') {
+        return Err(nom::Err::Failure(ParseError::new("Function definitions not supported", name_side)));
+    }
+    let (_, var) = cut_with_message(
+        delimited(space0, start_alpha, space0)(name_side), 
+        "Variable name must start with an alphabetic character",
+    )?;
     let (input, _) = char('=')(input)?;
     let (input, _) = space0(input)?;
     let (input, expr) = cut(parse_math_expr)(input)?;
     Ok((input, EDefVar(var.to_string(), Box::new(expr))))
-}
-
-fn start_alpha<'a>(input: Span<'a>) -> ParseResultStr<'a> {
-    let (input, first) = alphanumeric1(input)?;
-    if first.fragment().starts_with(|c: char| c.is_alphabetic()) {
-        Ok((input, first))
-    } else {
-        Err(nom::Err::Failure(ParseError::new("Expected alphabetic character".to_string(), first)))
-    }
 }
 
 fn parse_math_expr<'a>(input: Span<'a>) -> ParseResult<'a> {
@@ -98,6 +98,11 @@ fn parse_evar<'a>(input: Span<'a>) -> Expr {
 }
 
 fn parse_parens<'a>(input: Span<'a>) -> ParseResult<'a> {
+    let (_, open_count) = many0_count(char::<Span<'a>, ParseError<'a>>('('))(input)?;
+    let (_, close_count) = many0_count(char::<Span<'a>, ParseError<'a>>(')'))(input)?;
+    if open_count != close_count {
+        return Err(nom::Err::Failure(ParseError::new(&format!("Mismatched parentheses ({open_count}v{close_count})"), input)));
+    }
     delimited(
         space0,
         delimited(char('('), parse_math_expr, char(')')), // This is the recursive call
