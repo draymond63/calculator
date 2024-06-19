@@ -2,7 +2,7 @@ use crate::types::Expr;
 use crate::types::Expr::*;
 
 use nom::branch::alt;
-use nom::character::complete::{char, digit1, space0};
+use nom::character::complete::{char, digit1, space0, alphanumeric1};
 use nom::combinator::map;
 use nom::multi::many0;
 use nom::sequence::{delimited, tuple};
@@ -13,7 +13,7 @@ use std::error::Error;
 
 
 pub(crate) fn parse(input: &str) -> Result<Expr, Box<dyn Error>> {
-    let iresult = parse_math_expr(input);
+    let iresult = parse_math_expr_or_def(input);
     if iresult.is_ok() {
         let (input, result) = iresult.unwrap();
         if !input.is_empty() {
@@ -21,30 +21,45 @@ pub(crate) fn parse(input: &str) -> Result<Expr, Box<dyn Error>> {
         }
         Ok(result)
     } else {
-        panic!("parsing error, input remaining {:?}", iresult.unwrap_err());
+        panic!("{}", iresult.unwrap_err());
     }
+}
+
+fn parse_math_expr_or_def(input: &str) -> IResult<&str, Expr> {
+    let (input, expr) = alt((parse_def, parse_math_expr))(input)?;
+    Ok((input, expr))
+}
+
+fn parse_def(input: &str) -> IResult<&str, Expr> {
+    let (input, _) = space0(input)?;
+    let (input, var) = alphanumeric1(input)?;
+    let (input, _) = space0(input)?;
+    let (input, _) = char('=')(input)?;
+    let (input, _) = space0(input)?;
+    let (input, expr) = parse_math_expr(input)?;
+    Ok((input, EDefVar(var.to_string(), Box::new(expr))))
 }
 
 fn parse_math_expr(input: &str) -> IResult<&str, Expr> {
     let (input, num1) = parse_term(input)?;
     let (input, exprs) = many0(tuple((alt((char('+'), char('-'))), parse_term)))(input)?;
-    Ok((input, parse_expr(num1, exprs)))
+    Ok((input, map_ops(num1, exprs)))
 }
 
 fn parse_term(input: &str) -> IResult<&str, Expr> {
     let (input, num1) = parse_factor(input)?;
     let (input, exprs) = many0(tuple((alt((char('/'), char('*'))), parse_factor)))(input)?;
-    Ok((input, parse_expr(num1, exprs)))
+    Ok((input, map_ops(num1, exprs)))
 }
 
 fn parse_factor(input: &str) -> IResult<&str, Expr> {
-    let (input, num1) = parse_operation(input)?;
+    let (input, num1) = parse_insides(input)?;
     let (input, exprs) = many0(tuple((char('^'), parse_factor)))(input)?;
-    Ok((input, parse_expr(num1, exprs)))
+    Ok((input, map_ops(num1, exprs)))
 }
 
-fn parse_operation(input: &str) -> IResult<&str, Expr> {
-    alt((parse_parens, parse_number))(input)
+fn parse_insides(input: &str) -> IResult<&str, Expr> {
+    alt((parse_parens, parse_number, parse_var_use))(input)
 }
 
 fn parse_number(input: &str) -> IResult<&str, Expr> {
@@ -56,6 +71,14 @@ fn parse_enum(parsed_num: &str) -> Expr {
     ENum(num)
 }
 
+fn parse_var_use(input: &str) -> IResult<&str, Expr> {
+    map(delimited(space0, alphanumeric1, space0), parse_evar)(input)
+}
+
+fn parse_evar(input: &str) -> Expr {
+    EVar(input.to_string())
+}
+
 fn parse_parens(input: &str) -> IResult<&str, Expr> {
     delimited(
         space0,
@@ -64,7 +87,7 @@ fn parse_parens(input: &str) -> IResult<&str, Expr> {
     )(input)
 }
 
-fn parse_expr(expr: Expr, rem: Vec<(char, Expr)>) -> Expr {
+fn map_ops(expr: Expr, rem: Vec<(char, Expr)>) -> Expr {
     rem.into_iter().fold(expr, |acc, val| parse_op(val, acc))
 }
 

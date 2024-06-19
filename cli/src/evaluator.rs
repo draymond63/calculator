@@ -15,16 +15,17 @@ pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> f32 {
         EDiv(expr1, expr2) => eval_mut_context(*expr1, &mut context) / eval_mut_context(*expr2, &mut context),
         EExp(expr1, expr2) => eval_mut_context(*expr1, &mut context).powf(eval_mut_context(*expr2, &mut context)),
         EVar(var) => *context.vars.get(&var).expect("Variable not found"),
-        EFunc(_, _) => panic!("Function not implemented"),
+        // EFunc(_, _) => panic!("Function not implemented"),
         EDefVar(var, expr) => {
             let result = eval_mut_context(*expr, &mut context);
             context.vars.insert(var, result);
             result
         }
-        EDefFunc(_, _, _) => panic!("Function not implemented"),
+        // EDefFunc(_, _, _) => panic!("Function not implemented"),
     }
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate(expr: Expr) -> f32 {
     let mut context = Context::new();
     eval_mut_context(expr, &mut context)

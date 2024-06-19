@@ -5,14 +5,14 @@ use std::collections::HashMap;
 pub enum Expr {
     ENum(f32),
     EVar(String),
-    EFunc(String, Vec<Expr>),
+    // EFunc(String, Vec<Expr>),
     EAdd(Box<Expr>, Box<Expr>),
     ESub(Box<Expr>, Box<Expr>),
     EMul(Box<Expr>, Box<Expr>),
     EDiv(Box<Expr>, Box<Expr>),
     EExp(Box<Expr>, Box<Expr>),
     EDefVar(String, Box<Expr>),
-    EDefFunc(String, Vec<String>, Box<Expr>),
+    // EDefFunc(String, Vec<String>, Box<Expr>),
 }
 
 #[derive(Debug)]

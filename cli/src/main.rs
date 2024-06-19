@@ -16,15 +16,18 @@ mod types;
 
 
 fn evaluate(inputs: Vec<String>) -> Result<Vec<f32>, Box<dyn Error>> {
+    let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<String>>();
     let mut context = Context::new();
     let mut results = vec![0.0; inputs.len()];
+
     for (i, input) in inputs.into_iter().enumerate() {
+        println!("Evaluating: {}", input);
         let expr = parse(&input)?;
         results[i] = eval_mut_context(expr, &mut context);
+        println!("{} = {}", input, results[i])
     }
     Ok(results)
 }
-
 
 
 
