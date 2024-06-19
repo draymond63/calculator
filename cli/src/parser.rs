@@ -7,14 +7,22 @@ use nom::combinator::map;
 use nom::multi::many0;
 use nom::sequence::{delimited, tuple};
 use nom::IResult;
+
 use std::str::FromStr;
+use std::error::Error;
 
-pub(crate) fn parse(input: &str) -> IResult<&str, Expr> {
-    parse_basic_expr(input)
-}
 
-fn parse_basic_expr(input: &str) -> IResult<&str, Expr> {
-    parse_math_expr(input)
+pub(crate) fn parse(input: &str) -> Result<Expr, Box<dyn Error>> {
+    let iresult = parse_math_expr(input);
+    if iresult.is_ok() {
+        let (input, result) = iresult.unwrap();
+        if !input.is_empty() {
+            panic!("parsing error, input remaining {:?}", input);
+        }
+        Ok(result)
+    } else {
+        panic!("parsing error, input remaining {:?}", iresult.unwrap_err());
+    }
 }
 
 fn parse_parens(input: &str) -> IResult<&str, Expr> {
@@ -59,7 +67,7 @@ fn parse_op(tup: (char, Expr), expr1: Expr) -> Expr {
         '*' => EMul(Box::new(expr1), Box::new(expr2)),
         '/' => EDiv(Box::new(expr1), Box::new(expr2)),
         '^' => EExp(Box::new(expr1), Box::new(expr2)),
-        _ => panic!("Unknown Operation"),
+        _ => panic!("Unknown Operation, {:?}", op),
     }
 }
 
@@ -79,43 +87,34 @@ mod tests {
 
     #[test]
     fn parse_add_statement() {
-        let parsed = parse("12 + 34");
-        assert_eq!(
-            parsed,
-            Ok(("", EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)))))
-        );
+        let parsed = parse("12 + 34").unwrap();
+        let expected = EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_subtract_statement() {
-        let parsed = parse("12 - 34");
-        assert_eq!(
-            parsed,
-            Ok(("", ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)))))
-        );
+        let parsed = parse("12 - 34").unwrap();
+        let expected = ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_nested_add_sub_statements() {
-        let parsed = parse("12 - 34 + 15 - 9");
-        assert_eq!(
-            parsed,
-            Ok((
-                "",
-                ESub(
-                    Box::new(EAdd(
-                        Box::new(ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)))),
-                        Box::new(ENum(15.0))
-                    )),
-                    Box::new(ENum(9.0))
-                )
-            ))
+        let parsed = parse("12 - 34 + 15 - 9").unwrap();
+        let expected = ESub(
+            Box::new(EAdd(
+                Box::new(ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)))),
+                Box::new(ENum(15.0))
+            )),
+            Box::new(ENum(9.0))
         );
+        assert_eq!(parsed, expected);
     }
 
     #[test]
     fn test_parse_multi_level_expression() {
-        let parsed = parse("1 * 2 + 3 / 4 ^ 6");
+        let parsed = parse("1 * 2 + 3 / 4 ^ 6").unwrap();
         let expected = EAdd(
             Box::new(EMul(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
             Box::new(EDiv(
@@ -123,16 +122,16 @@ mod tests {
                 Box::new(EExp(Box::new(ENum(4.0)), Box::new(ENum(6.0)))),
             )),
         );
-        assert_eq!(parsed, Ok(("", expected)));
+        assert_eq!(parsed, expected);
     }
 
     #[test]
     fn test_parse_expression_with_parantheses() {
-        let parsed = parse("(1 + 2) * 3");
+        let parsed = parse("(1 + 2) * 3").unwrap();
         let expected = EMul(
             Box::new(EAdd(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
             Box::new(ENum(3.0)),
         );
-        assert_eq!(parsed, Ok(("", expected)));
+        assert_eq!(parsed, expected);
     }
 }

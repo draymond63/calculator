@@ -1,15 +1,33 @@
-use crate::types::Expr;
-use crate::types::Expr::*;
+use crate::types::{
+    Expr,
+    Expr::*,
+    Context,
+};
 
-pub(crate) fn evaluate(expr: Expr) -> f32 {
+
+
+pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> f32 {
     match expr {
         ENum(num) => num,
-        EAdd(expr1, expr2) => evaluate(*expr1) + evaluate(*expr2),
-        ESub(expr1, expr2) => evaluate(*expr1) - evaluate(*expr2),
-        EMul(expr1, expr2) => evaluate(*expr1) * evaluate(*expr2),
-        EDiv(expr1, expr2) => evaluate(*expr1) / evaluate(*expr2),
-        EExp(expr1, expr2) => evaluate(*expr1).powf(evaluate(*expr2)),
+        EAdd(expr1, expr2) => eval_mut_context(*expr1, &mut context) + eval_mut_context(*expr2, &mut context),
+        ESub(expr1, expr2) => eval_mut_context(*expr1, &mut context) - eval_mut_context(*expr2, &mut context),
+        EMul(expr1, expr2) => eval_mut_context(*expr1, &mut context) * eval_mut_context(*expr2, &mut context),
+        EDiv(expr1, expr2) => eval_mut_context(*expr1, &mut context) / eval_mut_context(*expr2, &mut context),
+        EExp(expr1, expr2) => eval_mut_context(*expr1, &mut context).powf(eval_mut_context(*expr2, &mut context)),
+        EVar(var) => *context.vars.get(&var).expect("Variable not found"),
+        EFunc(_, _) => panic!("Function not implemented"),
+        EDefVar(var, expr) => {
+            let result = eval_mut_context(*expr, &mut context);
+            context.vars.insert(var, result);
+            result
+        }
+        EDefFunc(_, _, _) => panic!("Function not implemented"),
     }
+}
+
+pub(crate) fn evaluate(expr: Expr) -> f32 {
+    let mut context = Context::new();
+    eval_mut_context(expr, &mut context)
 }
 
 #[cfg(test)]
