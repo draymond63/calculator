@@ -6,20 +6,20 @@ use crate::types::{
 
 
 
-pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> f32 {
+pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> Result<f32, String> {
     match expr {
-        ENum(num) => num,
-        EAdd(expr1, expr2) => eval_mut_context(*expr1, &mut context) + eval_mut_context(*expr2, &mut context),
-        ESub(expr1, expr2) => eval_mut_context(*expr1, &mut context) - eval_mut_context(*expr2, &mut context),
-        EMul(expr1, expr2) => eval_mut_context(*expr1, &mut context) * eval_mut_context(*expr2, &mut context),
-        EDiv(expr1, expr2) => eval_mut_context(*expr1, &mut context) / eval_mut_context(*expr2, &mut context),
-        EExp(expr1, expr2) => eval_mut_context(*expr1, &mut context).powf(eval_mut_context(*expr2, &mut context)),
-        EVar(var) => *context.vars.get(&var).expect("Variable not found"),
+        ENum(num) => Ok(num),
+        EAdd(expr1, expr2) => Ok(eval_mut_context(*expr1, &mut context)? + eval_mut_context(*expr2, &mut context)?),
+        ESub(expr1, expr2) => Ok(eval_mut_context(*expr1, &mut context)? - eval_mut_context(*expr2, &mut context)?),
+        EMul(expr1, expr2) => Ok(eval_mut_context(*expr1, &mut context)? * eval_mut_context(*expr2, &mut context)?),
+        EDiv(expr1, expr2) => Ok(eval_mut_context(*expr1, &mut context)? / eval_mut_context(*expr2, &mut context)?),
+        EExp(expr1, expr2) => Ok(eval_mut_context(*expr1, &mut context)?.powf(eval_mut_context(*expr2, &mut context)?)),
+        EVar(var) => context.vars.get(&var).map_or(Err(format!("Variable '{var}' not found")), |v| Ok(*v)),
         // EFunc(_, _) => panic!("Function not implemented"),
         EDefVar(var, expr) => {
-            let result = eval_mut_context(*expr, &mut context);
+            let result = eval_mut_context(*expr, &mut context)?;
             context.vars.insert(var, result);
-            result
+            Ok(result)
         }
         // EDefFunc(_, _, _) => panic!("Function not implemented"),
     }
@@ -28,7 +28,7 @@ pub(crate) fn eval_mut_context(expr: Expr, mut context: &mut Context) -> f32 {
 #[cfg(test)]
 pub(crate) fn evaluate(expr: Expr) -> f32 {
     let mut context = Context::new();
-    eval_mut_context(expr, &mut context)
+    eval_mut_context(expr, &mut context).unwrap()
 }
 
 #[cfg(test)]

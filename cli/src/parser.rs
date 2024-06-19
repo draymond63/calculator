@@ -5,9 +5,9 @@ use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0, alphanumeric1};
 use nom::combinator::map;
 use nom::multi::many0;
-use nom::sequence::{delimited, tuple};
+use nom::sequence::{delimited, tuple, pair};
 use nom::IResult;
-use nom::error::{context, VerboseError};
+use nom::error::{context, VerboseError, ParseError};
 
 use std::str::FromStr;
 
@@ -17,7 +17,7 @@ pub type ParseResult<'a> = IResult<&'a str, Expr, VerboseError<&'a str>>;
 pub(crate) fn parse<'a>(input: &'a str) -> ParseResult<'a> {
     let (input, expr) = raise_err_to_failure(parse_math_expr_or_def(input))?;
     if !input.is_empty() {
-        panic!("Parser returned Ok, but there is still input left: {:?}", input);
+        return Err(nom::Err::Failure(VerboseError::from_error_kind(input, nom::error::ErrorKind::Eof)));
     }
     Ok(("", expr))
 }
@@ -66,7 +66,12 @@ fn parse_factor<'a>(input: &'a str) -> ParseResult<'a> {
 }
 
 fn parse_insides<'a>(input: &'a str) -> ParseResult<'a> {
-    alt((parse_parens, parse_number, parse_var_use))(input)
+    alt((parse_parens, parse_implicit_multiply, parse_number, parse_var_use))(input)
+}
+
+fn parse_implicit_multiply<'a>(input: &'a str) -> ParseResult<'a> {
+    let (input, (num, var)) = pair(parse_number, alt((parse_parens, parse_var_use)))(input)?;
+    Ok((input, EMul(Box::new(num), Box::new(var))))
 }
 
 fn parse_number<'a>(input: &'a str) -> ParseResult<'a> {

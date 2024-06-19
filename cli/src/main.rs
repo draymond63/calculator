@@ -31,11 +31,15 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<f32>, Box<dyn Error>> {
             }
             Ok((_, expr)) => expr,
             k => {
-                panic!("unexpected parse error {:?}", k);
+                panic!("Unexpected parse error {:?}", k);
             }
         };
 
-        results[i] = eval_mut_context(expr, &mut context);
+        let eval = eval_mut_context(expr, &mut context);
+        if eval.is_err() {
+            return Err(format!("Error in line {}: {:?}", i + 1, eval.unwrap_err()).into());
+        }
+        results[i] = eval.unwrap();
         println!("{} = {}", input, results[i])
     }
     Ok(results)
