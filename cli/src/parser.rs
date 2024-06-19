@@ -25,21 +25,9 @@ pub(crate) fn parse(input: &str) -> Result<Expr, Box<dyn Error>> {
     }
 }
 
-fn parse_parens(input: &str) -> IResult<&str, Expr> {
-    delimited(
-        space0,
-        delimited(char('('), parse_math_expr, char(')')),
-        space0,
-    )(input)
-}
-
-fn parse_operation(input: &str) -> IResult<&str, Expr> {
-    alt((parse_parens, parse_number))(input)
-}
-
-fn parse_factor(input: &str) -> IResult<&str, Expr> {
-    let (input, num1) = parse_operation(input)?;
-    let (input, exprs) = many0(tuple((char('^'), parse_factor)))(input)?;
+fn parse_math_expr(input: &str) -> IResult<&str, Expr> {
+    let (input, num1) = parse_term(input)?;
+    let (input, exprs) = many0(tuple((alt((char('+'), char('-'))), parse_term)))(input)?;
     Ok((input, parse_expr(num1, exprs)))
 }
 
@@ -49,10 +37,31 @@ fn parse_term(input: &str) -> IResult<&str, Expr> {
     Ok((input, parse_expr(num1, exprs)))
 }
 
-fn parse_math_expr(input: &str) -> IResult<&str, Expr> {
-    let (input, num1) = parse_term(input)?;
-    let (input, exprs) = many0(tuple((alt((char('+'), char('-'))), parse_term)))(input)?;
+fn parse_factor(input: &str) -> IResult<&str, Expr> {
+    let (input, num1) = parse_operation(input)?;
+    let (input, exprs) = many0(tuple((char('^'), parse_factor)))(input)?;
     Ok((input, parse_expr(num1, exprs)))
+}
+
+fn parse_operation(input: &str) -> IResult<&str, Expr> {
+    alt((parse_parens, parse_number))(input)
+}
+
+fn parse_number(input: &str) -> IResult<&str, Expr> {
+    map(delimited(space0, digit1, space0), parse_enum)(input)
+}
+
+fn parse_enum(parsed_num: &str) -> Expr {
+    let num = f32::from_str(parsed_num).unwrap();
+    ENum(num)
+}
+
+fn parse_parens(input: &str) -> IResult<&str, Expr> {
+    delimited(
+        space0,
+        delimited(char('('), parse_math_expr, char(')')), // This is the recursive call
+        space0,
+    )(input)
 }
 
 fn parse_expr(expr: Expr, rem: Vec<(char, Expr)>) -> Expr {
@@ -71,14 +80,6 @@ fn parse_op(tup: (char, Expr), expr1: Expr) -> Expr {
     }
 }
 
-fn parse_enum(parsed_num: &str) -> Expr {
-    let num = f32::from_str(parsed_num).unwrap();
-    ENum(num)
-}
-
-fn parse_number(input: &str) -> IResult<&str, Expr> {
-    map(delimited(space0, digit1, space0), parse_enum)(input)
-}
 
 #[cfg(test)]
 mod tests {
