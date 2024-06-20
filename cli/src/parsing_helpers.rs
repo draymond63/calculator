@@ -1,11 +1,12 @@
 use crate::types::{Span, ParseError, ParseResultStr};
 
 
-use nom::character::complete::alphanumeric1;
+use nom::character::complete::{alphanumeric1, space0};
 
 
 
 pub fn start_alpha<'a>(input: Span<'a>) -> ParseResultStr<'a> {
+    let (input, _) = space0(input)?;
     let (input, first) = alphanumeric1(input)?;
     if first.fragment().starts_with(|c: char| c.is_alphabetic()) {
         Ok((input, first))

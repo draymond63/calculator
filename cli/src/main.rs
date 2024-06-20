@@ -27,7 +27,7 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<f32>>, Box<dyn Error>> {
         let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
         let (_, expr) = parse(line).unwrap();
 
-        let eval = eval_mut_context(expr, &mut context);
+        let eval = eval_mut_context(&expr, &mut context);
         if eval.is_err() {
             return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
         }

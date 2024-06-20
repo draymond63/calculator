@@ -13,7 +13,7 @@ use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0};
 use nom::bytes::complete::take_until;
 use nom::combinator::{map, cut};
-use nom::multi::{many0, many0_count, separated_list1};
+use nom::multi::{many0, many0_count, separated_list0};
 use nom::sequence::{delimited, tuple, pair};
 
 use std::str::FromStr;
@@ -47,7 +47,7 @@ fn parse_def<'a>(input: Span<'a>) -> ParseResult<'a> {
             delimited(char('('), take_until(")"), char(')'))(name_side),
             "Function parameters must be enclosed in parentheses",
         )?;
-        let (_, params) = separated_list1(char(','), cut(start_alpha))(param_inner)?;
+        let (_, params) = separated_list0(char(','), cut(start_alpha))(param_inner)?;
         let params = params.into_iter().map(|s| s.fragment().to_string()).collect();
         Ok((input, EDefFunc(var.to_string(), params, Box::new(expr))))
     } else {
@@ -94,7 +94,7 @@ fn parse_call_params<'a>(input: Span<'a>) -> ParseResultVec<'a> {
     let (input, _) = char('(')(input)?;
     // TODO: Which "input" should be returned?
     let (_, param_insides) = take_until(")")(input)?;
-    let (input, params) = separated_list1(char(','), parse_math_expr)(param_insides)?;
+    let (input, params) = separated_list0(char(','), parse_math_expr)(param_insides)?;
     Ok((input, params))
 }
 
