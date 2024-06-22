@@ -13,8 +13,28 @@ pub enum Expr {
     EMul(Box<Expr>, Box<Expr>),
     EDiv(Box<Expr>, Box<Expr>),
     EExp(Box<Expr>, Box<Expr>),
+    ETex(LatexExpr),
     EDefVar(String, Box<Expr>),
     EDefFunc(String, Vec<String>, Box<Expr>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LatexExpr {
+    pub name: String,
+    pub superscript: Option<Box<Expr>>,
+    pub subscript: Option<Box<Expr>>,
+    pub params: Vec<Expr>,
+}
+
+impl LatexExpr {
+    pub fn new(name: String) -> Self {
+        LatexExpr {
+            name,
+            superscript: None,
+            subscript: None,
+            params: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

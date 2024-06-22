@@ -1,13 +1,5 @@
-use crate::types::{
-    Expr,
-    Expr::*,
-    ParseResult,
-    ParseResultVec,
-    ParseError,
-    Span,
-};
-
-use crate::parsing_helpers::{start_alpha, cut_with_message, trim};
+use crate::types::{*, Expr::*};
+use crate::parsing_helpers::*;
 
 use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0};
@@ -59,50 +51,93 @@ fn parse_def(input: Span) -> ParseResult {
 }
 
 fn parse_math_expr(input: Span) -> ParseResult {
+    // println!("expr -> term: {:?}", input.fragment());
     let (input, num1) = parse_term(input)?;
     let term_splitters = alt((char('+'), char('-'))); 
+    // println!("expr -> term2: {:?}", input.fragment());
     let (input, exprs) = many0(tuple((term_splitters, parse_term)))(input)?;
+    // println!("expr done");
     Ok((input, map_ops(num1, exprs)))
 }
 
 fn parse_term(input: Span) -> ParseResult {
-    let (input, num1) = parse_factor(input)?;
+    // println!("term -> factor: {:?}", input.fragment());
+    let (input, num1) = parse_term_no_fractions(input)?;
     let term_splitters = alt((char('/'), char('*'))); 
-    let (input, exprs) = many0(tuple((term_splitters, parse_factor)))(input)?;
+    // println!("term -> factor2: {:?}", input.fragment());
+    let (input, exprs) = many0(tuple((term_splitters, parse_term_no_fractions)))(input)?;
+    // println!("term done");
     Ok((input, map_ops(num1, exprs)))
 }
 
-fn parse_factor(input: Span) -> ParseResult {
-    let (input, num1) = parse_insides(input)?;
-    let (input, exprs) = many0(tuple((char('^'), parse_factor)))(input)?;
-    Ok((input, map_ops(num1, exprs)))
+fn parse_term_no_fractions(input: Span) -> ParseResult {
+    // println!("factor -> insides: {:?}", input.fragment());
+    let (input, base) = parse_component(input)?;
+    // println!("factor -> factor: {:?}", input.fragment());
+    let (input, exprs) = many0(tuple((char('^'), parse_term_no_fractions)))(input)?;
+    // println!("factor done");
+    Ok((input, map_ops(base, exprs)))
 }
 
-fn parse_insides(input: Span) -> ParseResult {
-    alt((parse_parens, parse_implicit_multiply, parse_func_call, parse_number, parse_var_use))(input)
+fn parse_component(input: Span) -> ParseResult {
+    // println!("insides -> alt: {:?}", input.fragment());
+    alt((parse_parens, parse_implicit_multiply, parse_func_call, parse_latex, parse_number, parse_var_use))(input)
 }
 
 fn parse_implicit_multiply(input: Span) -> ParseResult {
     let (input, (num, var)) = pair(parse_number, alt((parse_parens, parse_var_use)))(input)?;
+    // println!("implicit multiply done");
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
 
 fn parse_func_call(input: Span) -> ParseResult {
-    println!("Parsing: {:?}", input.fragment());
     let (input, name) = start_alpha(input)?;
-    println!("Name: {:?}", name.fragment());
     let (input, params) = parse_call_params(input)?;
-    println!("Params: {:?}", params);
+    // println!("func call done");
     Ok((input, EFunc(name.to_string(), params)))
 }
 
 fn parse_call_params(input: Span) -> ParseResultVec {
-    let (rest, param_insides) = delimited(char('('), take_until(")"), char(')'))(input)?;
+    let (rest, param_insides) = unwrap('(', ')')(input)?;
     let (is_empty, params) = separated_list0(char(','), parse_math_expr)(param_insides)?;
     if !is_empty.is_empty() {
         return Err(nom::Err::Failure(ParseError::new("Call param input remain unparsed", is_empty)));
     }
     Ok((rest, params))
+}
+
+fn parse_latex(input: Span) -> ParseResult {
+    let (rest, _) = char('\\')(input)?;
+    let (rest, name) = cut_with_message(
+        start_alpha(rest),
+        "Latex command must be followed by a name",
+    )?;
+    let mut latex_expr = LatexExpr::new(name.to_string());
+    let mut remaining_input = rest;
+    
+    let superscript = char::<Span, ParseError>('^')(rest);
+    if superscript.is_ok() {
+        let (rest, inside) = safe_unwrap('{', '}')(superscript.unwrap().0);
+        let (_, expr) = cut(parse_math_expr)(inside)?;
+        latex_expr.superscript = Some(Box::new(expr));
+        remaining_input = rest;
+    }
+    let subscript = char::<Span, ParseError>('_')(rest);
+    if subscript.is_ok() {
+        let (rest, inside) = safe_unwrap('{', '}')(subscript.unwrap().0);
+        let (_, expr) = cut(parse_math_expr)(inside)?;
+        latex_expr.subscript = Some(Box::new(expr));
+        remaining_input = rest;
+    }
+    let mut params = unwrap('{', '}')(rest);
+    while params.is_ok() {
+        let (rest, inside) = params.unwrap();
+        let (_, expr) = cut(parse_math_expr)(inside)?;
+        latex_expr.params.push(expr);
+        params = unwrap('{', '}')(rest);
+        remaining_input = rest;
+    }
+    Ok((remaining_input, ETex(latex_expr)))
 }
 
 fn parse_number(input: Span) -> ParseResult {
@@ -154,7 +189,7 @@ fn parse_op(tup: (char, Expr), expr1: Expr) -> Expr {
 #[cfg(test)]
 mod tests {
     use crate::parser::parse;
-    use crate::types::Expr::*;
+    use crate::types::{Expr::*, LatexExpr};
 
     #[test]
     fn parse_add_statement() {
@@ -230,10 +265,23 @@ mod tests {
     #[test]
     fn test_function_call() {
         let (_, parsed) = parse("f(1,a)".into()).unwrap();
-        println!("{:?}", parsed);
         let expected = EFunc(
             "f".to_string(),
             vec![ENum(1.0), EVar("a".to_string())],
+        );
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_latex() {
+        let (_, parsed) = parse("\\frac{1}{2}".into()).unwrap();
+        let expected = ETex(
+            LatexExpr {
+                name: "frac".to_string(),
+                superscript: None,
+                subscript: None,
+                params: vec![ENum(1.0), ENum(2.0)],
+            }
         );
         assert_eq!(parsed, expected);
     }

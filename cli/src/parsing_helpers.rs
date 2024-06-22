@@ -1,11 +1,12 @@
 use crate::types::{Span, ParseError, ParseResultStr};
 
 
-use nom::character::complete::{alphanumeric1, space0};
+use nom::character::complete::{alphanumeric1, space0, char};
+use nom::bytes::complete::take_until;
 
 
 
-pub fn start_alpha<'a>(input: Span<'a>) -> ParseResultStr<'a> {
+pub fn start_alpha(input: Span) -> ParseResultStr {
     let (input, _) = space0(input)?;
     let (input, first) = alphanumeric1(input)?;
     if first.fragment().starts_with(|c: char| c.is_alphabetic()) {
@@ -37,5 +38,26 @@ where
         let (input, res) = f(input)?;
         let (input, _) = space0(input)?;
         Ok((input, res))
+    }
+}
+
+pub fn unwrap(begin: char, end: char) -> impl Fn(Span) -> ParseResultStr
+{
+    move |input| {
+        let (input, _) = char(begin)(input)?;
+        let (input, res) = take_until(&end.to_string()[..])(input)?;
+        let (input, _) = char(end)(input)?;
+        Ok((input, res))
+    }
+}
+
+pub fn safe_unwrap(begin: char, end: char) -> impl Fn(Span) -> (Span, Span)
+{
+    move |input| {
+        let result = unwrap(begin, end)(input);
+        match result {
+            Err(_) => (input, input),
+            _ => result.unwrap()
+        }
     }
 }

@@ -1,7 +1,5 @@
 use crate::types::{
-    Expr,
-    Expr::*,
-    Context,
+    Context, Expr::{self, *}, LatexExpr
 };
 
 pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<f32>, String> {
@@ -35,9 +33,15 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
     }
 }
 
+fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String>
+    where F: Fn(f32, f32) -> f32
+{
+    Ok(Some(func(eval_expr(expr1, context, defining)?.unwrap(), eval_expr(expr2, context, defining)?.unwrap())))
+}
+
 fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String> {
-    let compose = |expr1: &Expr, expr2: &Expr, func: fn(f32, f32) -> f32| -> Result<Option<f32>, String> {
-        Ok(Some(func(eval_expr(expr1, context, defining)?.unwrap(), eval_expr(expr2, context, defining)?.unwrap())))
+    let compose = |expr1: &Expr, expr2: &Expr, func: fn(f32, f32) -> f32| {
+        compose_expr(expr1, expr2, func, context, defining)
     };
 
     match expr {
@@ -73,7 +77,24 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
                 Err(format!("Function '{name}' not defined"))
             }
         },
+        ETex(expr) => eval_latex(expr, &context, defining),
         _ => Err(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_mut_context_def`?")),
+    }
+}
+
+fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String> {
+    let compose = |expr1: &Expr, expr2: &Expr, func: fn(f32, f32) -> f32| {
+        compose_expr(expr1, expr2, func, context, defining)
+    };
+
+    match &expr.name[..] {
+        "frac" => {
+            assert_eq!(expr.params.len(), 2);
+            let num = expr.params.get(0).unwrap();
+            let denom = expr.params.get(1).unwrap();
+            compose(num, denom, |a, b| a / b)
+        },
+        unknown_name => Err(format!("Unrecognized latex expression '{unknown_name}'"))
     }
 }
 
