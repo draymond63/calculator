@@ -26,3 +26,16 @@ pub fn cut_with_message<'a, T: std::fmt::Debug>(parsed: Result<T, nom::Err<Parse
         k => panic!("Unexpected parse error {:?}", k),
     }
 }
+
+
+pub fn trim<'a, F>(f: F) -> impl Fn(Span<'a>) -> ParseResultStr<'a>
+where
+    F: Fn(Span<'a>) -> ParseResultStr<'a> + 'a,
+{
+    move |input| {
+        let (input, _) = space0(input)?;
+        let (input, res) = f(input)?;
+        let (input, _) = space0(input)?;
+        Ok((input, res))
+    }
+}
