@@ -86,8 +86,8 @@ pub(crate) fn evaluate(expr: Expr) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::evaluator::evaluate;
-    use crate::types::Expr::*;
+    use crate::evaluator::{evaluate, eval_mut_context_def};
+    use crate::types::{Expr::*, Context};
 
     #[test]
     fn evaluate_enum_test() {
@@ -117,5 +117,34 @@ mod tests {
             )),
         );
         assert_eq!(evaluate(expr), 9.2);
+    }
+
+    #[test]
+    fn test_variable_definition() {
+        let expr = EDefVar(
+            "a".to_string(),
+            Box::new(ENum(2.0)),
+        );
+        let mut context = Context::new();
+        assert_eq!(context.vars.get("a"), None);
+        eval_mut_context_def(&expr, &mut context, None).unwrap();
+        assert_eq!(context.vars.get("a"), Some(&2.0));
+    }
+
+    #[test]
+    fn test_function_definition_and_call() {
+        // f(x,y) = x + y
+        let expr = EDefFunc(
+            "f".to_string(),
+            vec!["x".to_string(), "y".to_string()],
+            Box::new(EAdd(Box::new(EVar("x".to_string())), Box::new(EVar("y".to_string())))),
+        );
+        let mut context = Context::new();
+        assert_eq!(context.funcs.get("f"), None);
+        eval_mut_context_def(&expr, &mut context, None).unwrap();
+        assert_ne!(context.funcs.get("f"), None);
+
+        let call = EFunc("f".to_string(), vec![ENum(1.0), ENum(2.0)]);
+        assert_eq!(eval_mut_context_def(&call, &mut context, None).unwrap().unwrap(), 3.0);
     }
 }
