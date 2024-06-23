@@ -21,7 +21,7 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
             }
             context.vars.insert(var.clone(), result);
             Ok(Some(result))
-        }
+        },
         EDefFunc(name, params, expr) => {
             if defining.is_some() {
                 return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", name, defining.unwrap()));
@@ -100,6 +100,16 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
             }
             let (num, denom) = expr.params.clone().into_iter().collect_tuple().unwrap();
             compose(&num, &denom, |a, b| a / b)
+        },
+        "sqrt" => {
+            if expr.params.len() != 1 {
+                return Err("Square root expects 1 argument".to_string());
+            }
+            if expr.subscript.is_some() || expr.superscript.is_some() {
+                return Err("Square root does not support subscripts or superscripts".to_string());
+            }
+            let val = expr.params.get(0).unwrap();
+            Ok(Some(eval_expr(val, context, defining)?.unwrap().sqrt()))
         },
         "sum" => {
             if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {

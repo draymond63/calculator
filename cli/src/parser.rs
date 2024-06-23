@@ -85,7 +85,11 @@ fn parse_component(input: Span) -> ParseResult {
 }
 
 fn parse_implicit_multiply(input: Span) -> ParseResult {
-    let (input, (num, var)) = pair(parse_number, alt((parse_parens, parse_var_use)))(input)?;
+    let (input, (num, var)) = 
+    pair(
+        parse_number, 
+        alt((parse_parens, parse_var_use, parse_func_call, parse_latex))
+    )(input)?;
     // println!("found implicit multiply");
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
@@ -113,16 +117,19 @@ fn parse_latex(input: Span) -> ParseResult {
     let (rest, name) = mcut(start_alpha, "Latex command must be followed by a name")(rest)?;
     let mut latex_expr = LatexExpr::new(name.to_string());
     let mut remaining_input = rest;
+    let mut found_params = false;
 
     // println!("latex -> super: {:?}", remaining_input.fragment());
     let superscript = parse_latex_param(remaining_input, '^', false);
     if superscript.is_ok() {
         (remaining_input, latex_expr.superscript) = superscript.unwrap();
+        found_params = true;
     }
     // println!("latex -> sub: {:?}", remaining_input.fragment());
     let subscript = parse_latex_param(remaining_input, '_', true);
     if subscript.is_ok() {
         (remaining_input, latex_expr.subscript) = subscript.unwrap();
+        found_params = true;
     }
     let mut params = unwrap('{', '}')(remaining_input);
     while params.is_ok() {
@@ -132,6 +139,14 @@ fn parse_latex(input: Span) -> ParseResult {
         latex_expr.params.push(expr);
         params = unwrap('{', '}')(rest);
         remaining_input = rest;
+        found_params = true;
+    }
+    if !found_params {
+        if let Ok(num) = match_const(name) {
+            return Ok((remaining_input, num));
+        } else {
+            return Err(nom::Err::Failure(ParseError::new("Latex command must have at least one parameter", input)));
+        }
     }
     Ok((remaining_input, ETex(latex_expr)))
 }
@@ -162,10 +177,19 @@ fn parse_var_use(input: Span) -> ParseResult {
 }
 
 fn parse_evar(input: Span) -> Expr {
+    let found_const = match_const(input);
+    if found_const.is_ok() {
+        found_const.unwrap()
+    } else {
+        EVar(input.fragment().to_string())
+    }
+}
+
+fn match_const(input: Span) -> Result<Expr, &str> {
     match *input.fragment() {
-        "e" => ENum(std::f32::consts::E),
-        "pi" => ENum(std::f32::consts::PI),
-        _ => EVar(input.to_string()),
+        "e" => Ok(ENum(std::f32::consts::E)),
+        "pi" => Ok(ENum(std::f32::consts::PI)),
+        _ => Err("Unknown constant"),
     }
 }
 
