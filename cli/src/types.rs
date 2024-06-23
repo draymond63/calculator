@@ -54,7 +54,7 @@ impl Context {
 
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-type BaseParseResult<'a, T> = nom::IResult<Span<'a>, T, ParseError<'a>>;
+pub type BaseParseResult<'a, T> = nom::IResult<Span<'a>, T, ParseError<'a>>;
 pub type ParseResult<'a> = BaseParseResult<'a, Expr>;
 pub type ParseResultStr<'a> = BaseParseResult<'a, Span<'a>>;
 pub type ParseResultVec<'a> = BaseParseResult<'a, Vec<Expr>>;
@@ -74,6 +74,10 @@ impl<'a> ParseError<'a> {
 
     pub fn update_message(&mut self, message: &str) {
         self.message = message.to_string();
+    }
+
+    pub fn prepend_message(&mut self, message: &str) {
+        self.message = format!("{}: {}", message, self.message);
     }
     // pub fn span(&self) -> &Span { &self.span }
     // pub fn line(&self) -> u32 { self.span().location_line() }

@@ -16,16 +16,30 @@ pub fn start_alpha(input: Span) -> ParseResultStr {
     }
 }
 
+pub fn mcut<'a, I, O, F>(mut parser: F, message: &'a str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError<'a>>
+where
+  F: nom::Parser<I, O, ParseError<'a>>,
+{
+  move |input: I| match parser.parse(input) {
+    Err(nom::Err::Error(mut e)) => {
+        e.update_message(message);
+        Err(nom::Err::Failure(e))
+    },
+    rest => rest,
+  }
+}
 
-pub fn cut_with_message<'a, T: std::fmt::Debug>(parsed: Result<T, nom::Err<ParseError<'a>>>, message: &str) -> Result<T, nom::Err<ParseError<'a>>> {
-    match parsed {
-        Ok(resp) => Ok(resp),
-        Err(nom::Err::Error(mut e)) | Err(nom::Err::Failure(mut e)) => {
-            e.update_message(message);
-            Err(nom::Err::Failure(e))
-        },
-        k => panic!("Unexpected parse error {:?}", k),
-    }
+pub fn prepend_cut<'a, I, O, F>(mut parser: F, message: &'a str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError<'a>>
+where
+  F: nom::Parser<I, O, ParseError<'a>>,
+{
+  move |input: I| match parser.parse(input) {
+    Err(nom::Err::Error(mut e)) => {
+        e.prepend_message(message);
+        Err(nom::Err::Error(e))
+    },
+    rest => rest,
+  }
 }
 
 

@@ -2,6 +2,9 @@ use crate::types::{
     Context, Expr::{self, *}, LatexExpr
 };
 
+use itertools::Itertools;
+
+
 pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<f32>, String> {
     eval_mut_context_def(expr, &mut context, None)
 }
@@ -17,7 +20,7 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
                 return Err(format!("Variable '{var}' already defined"));
             }
             context.vars.insert(var.clone(), result);
-            Ok(None)
+            Ok(Some(result))
         }
         EDefFunc(name, params, expr) => {
             if defining.is_some() {
@@ -87,12 +90,48 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
         compose_expr(expr1, expr2, func, context, defining)
     };
 
-    match &expr.name[..] {
+    match expr.name.as_str() {
         "frac" => {
-            assert_eq!(expr.params.len(), 2);
-            let num = expr.params.get(0).unwrap();
-            let denom = expr.params.get(1).unwrap();
-            compose(num, denom, |a, b| a / b)
+            if expr.params.len() != 2 {
+                return Err("frac expects 2 arguments".to_string());
+            }
+            if expr.subscript.is_some() || expr.superscript.is_some() {
+                return Err("frac does not support subscripts or superscripts".to_string());
+            }
+            let (num, denom) = expr.params.clone().into_iter().collect_tuple().unwrap();
+            compose(&num, &denom, |a, b| a / b)
+        },
+        "sum" => {
+            if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
+                return Err(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr));
+            }
+            let param = expr.params.get(0).unwrap();
+            let superscript = expr.superscript.as_ref().unwrap();
+            let subscript = expr.subscript.as_ref().unwrap();
+            let up = eval_expr(&superscript, context, defining)?.unwrap();
+
+            let mut sum_context = context.clone();
+            let ub_var = match *subscript.clone() {
+                EDefVar(name, _) => Some(name),
+                _ => None,
+            };
+            let ub = eval_mut_context_def(&subscript, &mut sum_context, defining)?.unwrap();
+
+            // Ensure up and ub are integers
+            if up.fract() != 0.0 || ub.fract() != 0.0 {
+                return Err("Summation bounds must be integers".to_string());
+            }
+            let up = up as i32 + 1;
+            let ub = ub as i32;
+
+            let mut sum = 0.0;
+            for i in ub..up {
+                if ub_var.is_some() {
+                    sum_context.vars.insert(ub_var.clone().unwrap(), i as f32);
+                }
+                sum += eval_expr(&param, &sum_context, defining)?.unwrap();
+            }
+            Ok(Some(sum))
         },
         unknown_name => Err(format!("Unrecognized latex expression '{unknown_name}'"))
     }

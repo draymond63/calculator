@@ -32,7 +32,7 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<f32>>, Box<dyn Error>> {
             return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
         }
         results[i] = eval.unwrap();
-        println!("{} = {:#?}", input, results[i])
+        println!("{} = {:?}", input, results[i])
     }
     Ok(results)
 }

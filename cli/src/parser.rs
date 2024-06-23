@@ -4,7 +4,7 @@ use crate::parsing_helpers::*;
 use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0};
 use nom::bytes::complete::take_until;
-use nom::combinator::{map, cut};
+use nom::combinator::map;
 use nom::multi::{many0, separated_list0};
 use nom::sequence::{delimited, tuple, pair};
 
@@ -13,9 +13,9 @@ use std::str::FromStr;
 
 
 pub(crate) fn parse(input: Span) -> ParseResult {
-    let (input, expr) = cut(parse_math_expr_or_def)(input)?;
+    let (input, expr) = parse_math_expr_or_def(input)?;
     if !input.is_empty() {
-        return Err(nom::Err::Failure(ParseError::new("Unexpected input", input)));
+        return Err(nom::Err::Failure(ParseError::new("Terminated parsing early", input)));
     }
     Ok(("".into(), expr))
 }
@@ -27,18 +27,17 @@ fn parse_math_expr_or_def(input: Span) -> ParseResult {
 
 fn parse_def(input: Span) -> ParseResult {
     let (rhs, lhs) = take_until("=")(input)?;
-    let (lhs, var) = cut_with_message(
-        trim(start_alpha)(lhs), 
-        "Variable name must start with an alphabetic character",
-    )?;
+    if lhs.contains('{') {
+        return Err(nom::Err::Error(
+            ParseError::new("Matched definition, but it's most likely within a latex command. Is this corect?", lhs)
+        ));
+    }
+    let (lhs, var) = mcut(trim(start_alpha), "Variable name must start with an alphabetic character")(lhs)?;
     let (rhs, _) = char('=')(rhs)?;
     let (rhs, _) = space0(rhs)?;
-    let (rhs, expr) = cut(parse_math_expr)(rhs)?;
+    let (rhs, expr) = prepend_cut(parse_math_expr, "In RHS of definition")(rhs)?;
     if lhs.contains('(') {
-        let (_, params) = cut_with_message(
-            parse_call_params(lhs),
-            "Function parameters must be enclosed in parentheses",
-        )?;
+        let (_, params) = mcut(parse_call_params,"Invalid function parameters")(lhs)?;
         // Assert each params is just a Var and get the string that makes it
         let params = params.into_iter().map(|expr| match expr {
             EVar(var) => var,
@@ -81,19 +80,20 @@ fn parse_term_no_fractions(input: Span) -> ParseResult {
 
 fn parse_component(input: Span) -> ParseResult {
     // println!("insides -> alt: {:?}", input.fragment());
+    let (input, _) = space0(input)?;
     alt((parse_parens, parse_implicit_multiply, parse_func_call, parse_latex, parse_number, parse_var_use))(input)
 }
 
 fn parse_implicit_multiply(input: Span) -> ParseResult {
     let (input, (num, var)) = pair(parse_number, alt((parse_parens, parse_var_use)))(input)?;
-    // println!("implicit multiply done");
+    // println!("found implicit multiply");
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
 
 fn parse_func_call(input: Span) -> ParseResult {
     let (input, name) = start_alpha(input)?;
     let (input, params) = parse_call_params(input)?;
-    // println!("func call done");
+    // println!("found func call");
     Ok((input, EFunc(name.to_string(), params)))
 }
 
@@ -107,37 +107,45 @@ fn parse_call_params(input: Span) -> ParseResultVec {
 }
 
 fn parse_latex(input: Span) -> ParseResult {
+    // println!("testing for latex: {:?}", input.fragment());
     let (rest, _) = char('\\')(input)?;
-    let (rest, name) = cut_with_message(
-        start_alpha(rest),
-        "Latex command must be followed by a name",
-    )?;
+    // println!("found latex");
+    let (rest, name) = mcut(start_alpha, "Latex command must be followed by a name")(rest)?;
     let mut latex_expr = LatexExpr::new(name.to_string());
     let mut remaining_input = rest;
-    
-    let superscript = char::<Span, ParseError>('^')(rest);
+
+    // println!("latex -> super: {:?}", remaining_input.fragment());
+    let superscript = parse_latex_param(remaining_input, '^', false);
     if superscript.is_ok() {
-        let (rest, inside) = safe_unwrap('{', '}')(superscript.unwrap().0);
-        let (_, expr) = cut(parse_math_expr)(inside)?;
-        latex_expr.superscript = Some(Box::new(expr));
-        remaining_input = rest;
+        (remaining_input, latex_expr.superscript) = superscript.unwrap();
     }
-    let subscript = char::<Span, ParseError>('_')(rest);
+    // println!("latex -> sub: {:?}", remaining_input.fragment());
+    let subscript = parse_latex_param(remaining_input, '_', true);
     if subscript.is_ok() {
-        let (rest, inside) = safe_unwrap('{', '}')(subscript.unwrap().0);
-        let (_, expr) = cut(parse_math_expr)(inside)?;
-        latex_expr.subscript = Some(Box::new(expr));
-        remaining_input = rest;
+        (remaining_input, latex_expr.subscript) = subscript.unwrap();
     }
-    let mut params = unwrap('{', '}')(rest);
+    let mut params = unwrap('{', '}')(remaining_input);
     while params.is_ok() {
         let (rest, inside) = params.unwrap();
-        let (_, expr) = cut(parse_math_expr)(inside)?;
+        // println!("latex param -> component: {:?}", inside.fragment());
+        let (_, expr) = prepend_cut(parse_math_expr, "In latex param")(inside)?;
         latex_expr.params.push(expr);
         params = unwrap('{', '}')(rest);
         remaining_input = rest;
     }
     Ok((remaining_input, ETex(latex_expr)))
+}
+
+
+fn parse_latex_param(input: Span, c: char, allow_def: bool) -> BaseParseResult<Option<Box<Expr>>> {
+    let (input, _) = char(c)(input)?;
+    let (rest, inside) = safe_unwrap('{', '}')(input);
+    let (_, expr) = if allow_def {
+        prepend_cut(parse_math_expr_or_def, "In latex param")(inside)?
+    } else {
+        prepend_cut(parse_math_expr, "In latex param")(inside)?
+    };
+    Ok((rest, Some(Box::new(expr))))
 }
 
 fn parse_number(input: Span) -> ParseResult {
@@ -282,6 +290,41 @@ mod tests {
                 subscript: None,
                 params: vec![ENum(1.0), ENum(2.0)],
             }
+        );
+        assert_eq!(parsed, expected);
+
+        let (_, parsed) = parse("\\sum^{3}_{i=1}{i}".into()).unwrap();
+        let expected = ETex(
+            LatexExpr {
+                name: "sum".to_string(),
+                superscript: Some(Box::new(ENum(3.0))),
+                subscript: Some(Box::new(EDefVar("i".to_string(), Box::new(ENum(1.0))))),
+                params: vec![EVar("i".to_string())],
+            }
+        );
+        assert_eq!(parsed, expected);
+        // TODO: Allow superscript and subscript to be any order
+        // let (_, parsed) = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
+        // assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_full() {
+        let (_, parsed) = parse("f(x, y) = x + \\sum^{3}_{i=1}{i*y}".into()).unwrap();
+        let expected = EDefFunc(
+            "f".to_string(),
+            vec!["x".to_string(), "y".to_string()],
+            Box::new(EAdd(
+                Box::new(EVar("x".to_string())),
+                Box::new(ETex(
+                    LatexExpr {
+                        name: "sum".to_string(),
+                        superscript: Some(Box::new(ENum(3.0))),
+                        subscript: Some(Box::new(EDefVar("i".to_string(), Box::new(ENum(1.0))))),
+                        params: vec![EMul(Box::new(EVar("i".to_string())), Box::new(EVar("y".to_string())))],
+                    }
+                ))
+            ))
         );
         assert_eq!(parsed, expected);
     }
