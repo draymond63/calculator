@@ -1,15 +1,14 @@
-use crate::types::{
-    Context, Expr::{self, *}, LatexExpr
-};
+use crate::types::{Context, Expr::{self, *}, LatexExpr};
+use crate::units::UnitVal;
 
 use itertools::Itertools;
 
 
-pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<f32>, String> {
+pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<UnitVal>, String> {
     eval_mut_context_def(expr, &mut context, None)
 }
 
-fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option<&str>) -> Result<Option<f32>, String> {
+fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
     match expr {
         EDefVar(var, expr) => {
             let result = eval_mut_context_def(expr, &mut context, Some(&var))?.unwrap();
@@ -19,7 +18,7 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
             if context.vars.contains_key(var) {
                 return Err(format!("Variable '{var}' already defined"));
             }
-            context.vars.insert(var.clone(), result);
+            context.vars.insert(var.clone(), result.clone());
             Ok(Some(result))
         },
         EDefFunc(name, params, expr) => {
@@ -36,19 +35,20 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
     }
 }
 
-fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String>
-    where F: Fn(f32, f32) -> f32
+fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String>
+    where F: Fn(UnitVal, UnitVal) -> UnitVal
 {
     Ok(Some(func(eval_expr(expr1, context, defining)?.unwrap(), eval_expr(expr2, context, defining)?.unwrap())))
 }
 
-fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String> {
-    let compose = |expr1: &Expr, expr2: &Expr, func: fn(f32, f32) -> f32| {
+fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+    let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
 
     match expr {
-        ENum(num) => Ok(Some(*num)),
+        ENum(num) => Ok(Some(UnitVal::scalar(*num))),
+        EUnit(unit) => Ok(Some(unit.clone())),
         EAdd(expr1, expr2) => compose(expr1, expr2, |a, b| a + b),
         ESub(expr1, expr2) => compose(expr1, expr2, |a, b| a - b),
         EMul(expr1, expr2) => compose(expr1, expr2, |a, b| a * b),
@@ -58,7 +58,7 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
             if defining.is_some() && var == defining.unwrap() {
                 return Err(format!("Variable '{var}' cannot be defined recursively"))
             } else if let Some(val) = context.vars.get(var) {
-                Ok(Some(*val))
+                Ok(Some(val.clone()))
             } else {
                 Err(format!("Variable '{var}' not defined"))
             }
@@ -85,8 +85,8 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
     }
 }
 
-fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<Option<f32>, String> {
-    let compose = |expr1: &Expr, expr2: &Expr, func: fn(f32, f32) -> f32| {
+fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+    let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
 
@@ -131,17 +131,17 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
             if up.fract() != 0.0 || ub.fract() != 0.0 {
                 return Err("Summation bounds must be integers".to_string());
             }
-            let up = up as i32 + 1;
-            let ub = ub as i32;
+            let up = up.as_scalar() as i32 + 1;
+            let ub = ub.as_scalar() as i32;
 
             let mut sum = 0.0;
             for i in ub..up {
                 if ub_var.is_some() {
-                    sum_context.vars.insert(ub_var.clone().unwrap(), i as f32);
+                    sum_context.vars.insert(ub_var.clone().unwrap(), UnitVal::scalar(i as f32));
                 }
-                sum += eval_expr(&param, &sum_context, defining)?.unwrap();
+                sum += eval_expr(&param, &sum_context, defining)?.unwrap().as_scalar();
             }
-            Ok(Some(sum))
+            Ok(Some(UnitVal::scalar(sum)))
         },
         unknown_name => Err(format!("Unrecognized latex expression '{unknown_name}'"))
     }
@@ -149,7 +149,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
 
 
 #[cfg(test)]
-pub(crate) fn evaluate(expr: Expr) -> f32 {
+pub(crate) fn evaluate(expr: Expr) -> UnitVal {
     let mut context = Context::new();
     eval_mut_context(&expr, &mut context).unwrap().unwrap()
 }
@@ -158,23 +158,24 @@ pub(crate) fn evaluate(expr: Expr) -> f32 {
 mod tests {
     use crate::evaluator::{evaluate, eval_mut_context_def};
     use crate::types::{Expr::*, Context};
+    use crate::units::UnitVal;
 
     #[test]
     fn evaluate_enum_test() {
         let expr = ENum(1234.0);
-        assert_eq!(evaluate(expr), 1234.0);
+        assert_eq!(evaluate(expr).as_scalar(), 1234.0);
     }
 
     #[test]
     fn evaluate_eadd_test() {
         let expr = EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
-        assert_eq!(evaluate(expr), 46.0);
+        assert_eq!(evaluate(expr).as_scalar(), 46.0);
     }
 
     #[test]
     fn evaluate_easub_test() {
         let expr = ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
-        assert_eq!(evaluate(expr), -22.0);
+        assert_eq!(evaluate(expr).as_scalar(), -22.0);
     }
 
     #[test]
@@ -186,7 +187,7 @@ mod tests {
                 Box::new(ENum(5.0)),
             )),
         );
-        assert_eq!(evaluate(expr), 9.2);
+        assert_eq!(evaluate(expr).as_scalar(), 9.2);
     }
 
     #[test]
@@ -198,7 +199,7 @@ mod tests {
         let mut context = Context::new();
         assert_eq!(context.vars.get("a"), None);
         eval_mut_context_def(&expr, &mut context, None).unwrap();
-        assert_eq!(context.vars.get("a"), Some(&2.0));
+        assert_eq!(context.vars.get("a"), Some(&UnitVal::scalar(2.0)));
     }
 
     #[test]
@@ -215,6 +216,15 @@ mod tests {
         assert_ne!(context.funcs.get("f"), None);
 
         let call = EFunc("f".to_string(), vec![ENum(1.0), ENum(2.0)]);
-        assert_eq!(eval_mut_context_def(&call, &mut context, None).unwrap().unwrap(), 3.0);
+        assert_eq!(eval_mut_context_def(&call, &mut context, None).unwrap().unwrap().as_scalar(), 3.0);
+    }
+
+    #[test]
+    fn test_units_good() {
+        let expr = EAdd(
+            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("km"))))),
+            Box::new(EMul(Box::new(ENum(1000.0)), Box::new(EUnit(UnitVal::new_base("m"))))),
+        );
+        assert_eq!(evaluate(expr), UnitVal::new(2.0, "km"));
     }
 }

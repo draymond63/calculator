@@ -1,7 +1,9 @@
+
 use crate::{
     evaluator::eval_mut_context,
     types::{Context, Span},
     parser::parse,
+    units::UnitVal,
 };
 
 use std::error::Error;
@@ -14,10 +16,11 @@ mod evaluator;
 mod parser;
 mod parsing_helpers;
 mod types;
+mod units;
 
 
 
-fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<f32>>, Box<dyn Error>> {
+fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, Box<dyn Error>> {
     let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
     let mut context = Context::new();
     let mut results = vec![None; inputs.len()];
@@ -32,8 +35,10 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<f32>>, Box<dyn Error>> {
         if eval.is_err() {
             return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
         }
-        results[i] = eval.unwrap();
-        println!("{} = {:?}", input, results[i])
+        let res = eval.unwrap();
+        results[i] = res.clone();
+        let unit_val = res.unwrap();
+        println!("{} = {:?}", input, unit_val.to_string());
     }
     Ok(results)
 }

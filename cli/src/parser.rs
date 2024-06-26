@@ -1,5 +1,6 @@
 use crate::types::{*, Expr::*};
 use crate::parsing_helpers::*;
+use crate::units::UnitVal;
 
 use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0};
@@ -177,11 +178,16 @@ fn parse_var_use(input: Span) -> ParseResult {
 }
 
 fn parse_evar(input: Span) -> Expr {
-    let found_const = match_const(input);
-    if found_const.is_ok() {
-        found_const.unwrap()
+    match_const(input)
+        .or_else(|_| match_unit(input))
+        .or_else(|_| Ok::<Expr, &str>(EVar(input.fragment().to_string()))).unwrap()
+}
+
+fn match_unit(input: Span) -> Result<Expr, &str> {
+    if UnitVal::is_valid_unit(input.fragment()) {
+        Ok(EUnit(UnitVal::new_base(input.fragment())))
     } else {
-        EVar(input.fragment().to_string())
+        Err("Invalid unit")
     }
 }
 
@@ -220,8 +226,7 @@ fn parse_op(tup: (char, Expr), expr1: Expr) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::parse;
-    use crate::types::{Expr::*, LatexExpr};
+    use super::*;
 
     #[test]
     fn parse_add_statement() {
@@ -330,6 +335,16 @@ mod tests {
         // TODO: Allow superscript and subscript to be any order
         // let (_, parsed) = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
         // assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_units() {
+        let (_, parsed) = parse("1 km + 1 m".into()).unwrap();
+        let expected = EAdd(
+            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("km"))))),
+            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("m"))))),
+        );
+        assert_eq!(parsed, expected);
     }
 
     #[test]

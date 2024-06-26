@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use nom;
 use nom_locate::LocatedSpan;
 
+use crate::units::UnitVal;
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     ENum(f32),
     EVar(String),
+    EUnit(UnitVal),
     EFunc(String, Vec<Expr>),
     EAdd(Box<Expr>, Box<Expr>),
     ESub(Box<Expr>, Box<Expr>),
@@ -39,7 +42,7 @@ impl LatexExpr {
 
 #[derive(Debug, Clone)]
 pub struct Context {
-    pub vars: HashMap<String, f32>,
+    pub vars: HashMap<String, UnitVal>,
     pub funcs: HashMap<String, (Vec<String>, Expr)>,
 }
 
