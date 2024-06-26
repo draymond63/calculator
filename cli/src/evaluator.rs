@@ -31,24 +31,24 @@ fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option
             context.funcs.insert(name.clone(), (params.clone(), *expr.clone()));
             Ok(None)
         },
-        _ => eval_expr(expr, &context, defining),
+        _ => Ok(Some(eval_expr(expr, context, defining)?)),
     }
 }
 
-fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String>
+fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<UnitVal, String>
     where F: Fn(UnitVal, UnitVal) -> UnitVal
 {
-    Ok(Some(func(eval_expr(expr1, context, defining)?.unwrap(), eval_expr(expr2, context, defining)?.unwrap())))
+    Ok(func(eval_expr(expr1, context, defining)?, eval_expr(expr2, context, defining)?))
 }
 
-fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
 
     match expr {
-        ENum(num) => Ok(Some(UnitVal::scalar(*num))),
-        EUnit(unit) => Ok(Some(unit.clone())),
+        ENum(num) => Ok(UnitVal::scalar(*num)),
+        EUnit(unit) => Ok(unit.clone()),
         EAdd(expr1, expr2) => compose(expr1, expr2, |a, b| a + b),
         ESub(expr1, expr2) => compose(expr1, expr2, |a, b| a - b),
         EMul(expr1, expr2) => compose(expr1, expr2, |a, b| a * b),
@@ -58,14 +58,17 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
             if defining.is_some() && var == defining.unwrap() {
                 return Err(format!("Variable '{var}' cannot be defined recursively"))
             } else if let Some(val) = context.vars.get(var) {
-                Ok(Some(val.clone()))
+                Ok(val.clone())
             } else {
                 Err(format!("Variable '{var}' not defined"))
             }
         },
         EFunc(name, inputs) => {
-            if defining.is_some() && name == defining.unwrap() {
-                return Err(format!("Function '{name}' cannot be defined recursively"))
+            let applied_defaulted_func = apply_default_function(name, inputs, context, defining);
+            if applied_defaulted_func.is_ok() {
+                applied_defaulted_func
+            } else if defining.is_some() && name == defining.unwrap() {
+                Err(format!("Function '{name}' cannot be defined recursively"))
             } else if let Some((params, func_def)) = context.funcs.get(name) {
                 if params.len() != inputs.len() {
                     return Err(format!("Function '{}' expects {} arguments, but got {}", name, params.len(), inputs.len()));
@@ -73,9 +76,9 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
                 let mut eval_context = context.clone();
 
                 for (param, input) in params.iter().zip(inputs.iter()) {
-                    eval_context.vars.insert(param.clone(), eval_expr(input, context, defining)?.unwrap());
+                    eval_context.vars.insert(param.clone(), eval_expr(input, context, defining)?);
                 }
-                eval_mut_context_def(func_def, &mut eval_context, defining)
+                eval_expr(func_def, &eval_context, defining)
             } else {
                 Err(format!("Function '{name}' not defined"))
             }
@@ -85,7 +88,25 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<O
     }
 }
 
-fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
+    if inputs.len() > 1 {
+        return Err("Default functions only accept one argument".to_string());
+    }
+    let input = eval_expr(inputs.get(0).unwrap(), context, defining)?;
+    let callable = match name.as_str() {
+        "sin" => Some(Box::new(|x: f32| x.sin()) as Box<dyn Fn(f32) -> f32>),
+        "cos" => Some(Box::new(|x: f32| x.cos()) as Box<dyn Fn(f32) -> f32>),
+        "tan" => Some(Box::new(|x: f32| x.tan()) as Box<dyn Fn(f32) -> f32>),
+        _ => None,
+    };
+    if let Some(callable) = callable {
+        Ok(UnitVal::scalar(callable(input.as_scalar())))
+    } else {
+        Err(format!("Function '{name}' not defined"))
+    }
+}
+
+fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
@@ -109,7 +130,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
                 return Err("Square root does not support subscripts or superscripts".to_string());
             }
             let val = expr.params.get(0).unwrap();
-            Ok(Some(eval_expr(val, context, defining)?.unwrap().sqrt()))
+            Ok(eval_expr(val, context, defining)?.sqrt())
         },
         "sum" => {
             if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
@@ -118,7 +139,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
             let param = expr.params.get(0).unwrap();
             let superscript = expr.superscript.as_ref().unwrap();
             let subscript = expr.subscript.as_ref().unwrap();
-            let up = eval_expr(&superscript, context, defining)?.unwrap();
+            let up = eval_expr(&superscript, context, defining)?;
 
             let mut sum_context = context.clone();
             let ub_var = match *subscript.clone() {
@@ -139,9 +160,9 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
                 if ub_var.is_some() {
                     sum_context.vars.insert(ub_var.clone().unwrap(), UnitVal::scalar(i as f32));
                 }
-                sum += eval_expr(&param, &sum_context, defining)?.unwrap().as_scalar();
+                sum += eval_expr(&param, &sum_context, defining)?.as_scalar();
             }
-            Ok(Some(UnitVal::scalar(sum)))
+            Ok(UnitVal::scalar(sum))
         },
         unknown_name => Err(format!("Unrecognized latex expression '{unknown_name}'"))
     }
