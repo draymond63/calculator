@@ -170,7 +170,7 @@ fn parse_number(input: Span) -> ParseResult {
 
 fn parse_enum(parsed_num: Span) -> Expr {
     let num = f32::from_str(parsed_num.fragment()).unwrap();
-    ENum(num)
+    ENum(UnitVal::scalar(num))
 }
 
 fn parse_var_use(input: Span) -> ParseResult {
@@ -185,7 +185,7 @@ fn parse_evar(input: Span) -> Expr {
 
 fn match_unit(input: Span) -> Result<Expr, &str> {
     if UnitVal::is_valid_unit(input.fragment()) {
-        Ok(EUnit(UnitVal::new_base(input.fragment())))
+        Ok(ENum(UnitVal::new_identity(input.fragment())))
     } else {
         Err("Invalid unit")
     }
@@ -193,8 +193,8 @@ fn match_unit(input: Span) -> Result<Expr, &str> {
 
 fn match_const(input: Span) -> Result<Expr, &str> {
     match *input.fragment() {
-        "e" => Ok(ENum(std::f32::consts::E)),
-        "pi" => Ok(ENum(std::f32::consts::PI)),
+        "e" => Ok(ENum(UnitVal::scalar(std::f32::consts::E))),
+        "pi" => Ok(ENum(UnitVal::scalar(std::f32::consts::PI))),
         _ => Err("Unknown constant"),
     }
 }
@@ -228,17 +228,25 @@ fn parse_op(tup: (char, Expr), expr1: Expr) -> Expr {
 mod tests {
     use super::*;
 
+    fn num(x: f32) -> Expr {
+        ENum(UnitVal::scalar(x))
+    }
+
+    fn boxed_num(x: f32) -> Box<Expr> {
+        Box::new(num(x))
+    }
+
     #[test]
     fn parse_add_statement() {
         let (_, parsed) = parse("12 + 34".into()).unwrap();
-        let expected = EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        let expected = EAdd(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_subtract_statement() {
         let (_, parsed) = parse("12 - 34".into()).unwrap();
-        let expected = ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        let expected = ESub(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(parsed, expected);
     }
 
@@ -247,10 +255,10 @@ mod tests {
         let (_, parsed) = parse("12 - 34 + 15 - 9".into()).unwrap();
         let expected = ESub(
             Box::new(EAdd(
-                Box::new(ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)))),
-                Box::new(ENum(15.0))
+                Box::new(ESub(boxed_num(12.0), boxed_num(34.0))),
+                boxed_num(15.0)
             )),
-            Box::new(ENum(9.0))
+            boxed_num(9.0)
         );
         assert_eq!(parsed, expected);
     }
@@ -259,10 +267,10 @@ mod tests {
     fn test_parse_multi_level_expression() {
         let (_, parsed) = parse("1 * 2 + 3 / 4 ^ 6".into()).unwrap();
         let expected = EAdd(
-            Box::new(EMul(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
+            Box::new(EMul(boxed_num(1.0), boxed_num(2.0))),
             Box::new(EDiv(
-                Box::new(ENum(3.0)),
-                Box::new(EExp(Box::new(ENum(4.0)), Box::new(ENum(6.0)))),
+                boxed_num(3.0),
+                Box::new(EExp(boxed_num(4.0), boxed_num(6.0))),
             )),
         );
         assert_eq!(parsed, expected);
@@ -272,8 +280,8 @@ mod tests {
     fn test_parse_expression_with_parantheses() {
         let (_, parsed) = parse("(1 + 2) * 3".into()).unwrap();
         let expected = EMul(
-            Box::new(EAdd(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
-            Box::new(ENum(3.0)),
+            Box::new(EAdd(boxed_num(1.0), boxed_num(2.0))),
+            boxed_num(3.0),
         );
         assert_eq!(parsed, expected);
     }
@@ -283,7 +291,7 @@ mod tests {
         let (_, parsed) = parse("a = 2".into()).unwrap();
         let expected = EDefVar(
             "a".to_string(),
-            Box::new(ENum(2.0)),
+            boxed_num(2.0),
         );
         assert_eq!(parsed, expected);
     }
@@ -304,7 +312,7 @@ mod tests {
         let (_, parsed) = parse("f(1,a)".into()).unwrap();
         let expected = EFunc(
             "f".to_string(),
-            vec![ENum(1.0), EVar("a".to_string())],
+            vec![num(1.0), EVar("a".to_string())],
         );
         assert_eq!(parsed, expected);
     }
@@ -317,7 +325,7 @@ mod tests {
                 name: "frac".to_string(),
                 superscript: None,
                 subscript: None,
-                params: vec![ENum(1.0), ENum(2.0)],
+                params: vec![num(1.0), num(2.0)],
             }
         );
         assert_eq!(parsed, expected);
@@ -326,8 +334,8 @@ mod tests {
         let expected = ETex(
             LatexExpr {
                 name: "sum".to_string(),
-                superscript: Some(Box::new(ENum(3.0))),
-                subscript: Some(Box::new(EDefVar("i".to_string(), Box::new(ENum(1.0))))),
+                superscript: Some(Box::new(num(3.0))),
+                subscript: Some(Box::new(EDefVar("i".to_string(), Box::new(num(1.0))))),
                 params: vec![EVar("i".to_string())],
             }
         );
@@ -341,8 +349,8 @@ mod tests {
     fn test_units() {
         let (_, parsed) = parse("1 km + 1 m".into()).unwrap();
         let expected = EAdd(
-            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("km"))))),
-            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("m"))))),
+            Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("km"))))),
+            Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("m"))))),
         );
         assert_eq!(parsed, expected);
     }
@@ -358,8 +366,8 @@ mod tests {
                 Box::new(ETex(
                     LatexExpr {
                         name: "sum".to_string(),
-                        superscript: Some(Box::new(ENum(3.0))),
-                        subscript: Some(Box::new(EDefVar("i".to_string(), Box::new(ENum(1.0))))),
+                        superscript: Some(boxed_num(3.0)),
+                        subscript: Some(Box::new(EDefVar("i".to_string(), boxed_num(1.0)))),
                         params: vec![EMul(Box::new(EVar("i".to_string())), Box::new(EVar("y".to_string())))],
                     }
                 ))

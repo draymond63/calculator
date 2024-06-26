@@ -34,7 +34,7 @@ impl UnitVal {
         UnitVal::from_unit(unit).is_ok()
     }
 
-    pub fn new_base(unit: &str) -> Self {
+    pub fn new_identity(unit: &str) -> Self {
         UnitVal::new_value(1.0, unit)
     }
 

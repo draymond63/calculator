@@ -7,9 +7,8 @@ use crate::units::UnitVal;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    ENum(f32),
+    ENum(UnitVal),
     EVar(String),
-    EUnit(UnitVal),
     EFunc(String, Vec<Expr>),
     EAdd(Box<Expr>, Box<Expr>),
     ESub(Box<Expr>, Box<Expr>),

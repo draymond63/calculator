@@ -47,8 +47,7 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
     };
 
     match expr {
-        ENum(num) => Ok(UnitVal::scalar(*num)),
-        EUnit(unit) => Ok(unit.clone()),
+        ENum(num) => Ok(num.clone()),
         EAdd(expr1, expr2) => compose(expr1, expr2, |a, b| a + b),
         ESub(expr1, expr2) => compose(expr1, expr2, |a, b| a - b),
         EMul(expr1, expr2) => compose(expr1, expr2, |a, b| a * b),
@@ -177,35 +176,41 @@ pub(crate) fn evaluate(expr: Expr) -> UnitVal {
 
 #[cfg(test)]
 mod tests {
-    use crate::evaluator::{evaluate, eval_mut_context_def};
-    use crate::types::{Expr::*, Context};
-    use crate::units::UnitVal;
+    use super::*;
+
+    fn num(x: f32) -> Expr {
+        ENum(UnitVal::scalar(x))
+    }
+
+    fn boxed_num(x: f32) -> Box<Expr> {
+        Box::new(num(x))
+    }
 
     #[test]
     fn evaluate_enum_test() {
-        let expr = ENum(1234.0);
+        let expr = num(1234.0);
         assert_eq!(evaluate(expr).as_scalar(), 1234.0);
     }
 
     #[test]
     fn evaluate_eadd_test() {
-        let expr = EAdd(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        let expr = EAdd(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(evaluate(expr).as_scalar(), 46.0);
     }
 
     #[test]
     fn evaluate_easub_test() {
-        let expr = ESub(Box::new(ENum(12.0)), Box::new(ENum(34.0)));
+        let expr = ESub(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(evaluate(expr).as_scalar(), -22.0);
     }
 
     #[test]
     fn test_evaluate_nested_arithmetic_expression() {
         let expr = EAdd(
-            Box::new(EMul(Box::new(ENum(1.0)), Box::new(ENum(2.0)))),
+            Box::new(EMul(boxed_num(1.0), boxed_num(2.0))),
             Box::new(EDiv(
-                Box::new(EExp(Box::new(ENum(6.0)), Box::new(ENum(2.0)))),
-                Box::new(ENum(5.0)),
+                Box::new(EExp(boxed_num(6.0), boxed_num(2.0))),
+                boxed_num(5.0),
             )),
         );
         assert_eq!(evaluate(expr).as_scalar(), 9.2);
@@ -215,7 +220,7 @@ mod tests {
     fn test_variable_definition() {
         let expr = EDefVar(
             "a".to_string(),
-            Box::new(ENum(2.0)),
+            boxed_num(2.0),
         );
         let mut context = Context::new();
         assert_eq!(context.vars.get("a"), None);
@@ -236,16 +241,16 @@ mod tests {
         eval_mut_context_def(&expr, &mut context, None).unwrap();
         assert_ne!(context.funcs.get("f"), None);
 
-        let call = EFunc("f".to_string(), vec![ENum(1.0), ENum(2.0)]);
+        let call = EFunc("f".to_string(), vec![num(1.0), num(2.0)]);
         assert_eq!(eval_mut_context_def(&call, &mut context, None).unwrap().unwrap().as_scalar(), 3.0);
     }
 
     #[test]
     fn test_units_good() {
         let expr = EAdd(
-            Box::new(EMul(Box::new(ENum(1.0)), Box::new(EUnit(UnitVal::new_base("km"))))),
-            Box::new(EMul(Box::new(ENum(1000.0)), Box::new(EUnit(UnitVal::new_base("m"))))),
+            Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("km"))))),
+            Box::new(EMul(boxed_num(1000.0), Box::new(ENum(UnitVal::new_identity("m"))))),
         );
-        assert_eq!(evaluate(expr), UnitVal::new(2.0, "km"));
+        assert_eq!(evaluate(expr), UnitVal::new_value(2.0, "km"));
     }
 }
