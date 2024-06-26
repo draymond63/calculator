@@ -1,5 +1,6 @@
 use bimap::BiMap;
-use std::sync::OnceLock;
+use itertools::Itertools;
+use std::{collections::HashMap, sync::OnceLock, vec};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitVal {
@@ -7,15 +8,22 @@ pub struct UnitVal {
     pub quantity: Quantity,
 }
 
-type Quantity = (i32, i32, i32, i32, i32, i32, i32);
+type Quantity = vec::Vec<i32>;
 
 
 impl UnitVal {
-    pub fn new(value: f32, unit: &str) -> Self {
+    pub fn new(value: f32, quantity: Quantity) -> Self {
+        if quantity.len() != 7 {
+            panic!("Invalid quantity. Should have a length of 7: {:?}", quantity)
+        }
+        UnitVal { value, quantity }
+    }
+
+    pub fn new_value(value: f32, unit: &str) -> Self {
         let (exp, quantity) = UnitVal::from_unit(unit).unwrap();
         let scale_factor = 10.0_f32.powf(exp as f32);
         let value = value * scale_factor;
-        UnitVal { value, quantity }
+        UnitVal::new(value, quantity)
     }
 
     pub fn scalar(value: f32) -> Self {
@@ -27,7 +35,7 @@ impl UnitVal {
     }
 
     pub fn new_base(unit: &str) -> Self {
-        UnitVal::new(1.0, unit)
+        UnitVal::new_value(1.0, unit)
     }
 
     pub fn to_string(&self) -> String {
@@ -35,14 +43,41 @@ impl UnitVal {
             return self.value.to_string()
         } 
         let exp = self.value.log10().floor() as i32 / 3 * 3;
-        let val = self.value / 10.0_f32.powf(exp as f32);
-        let base_unit = unit_map().get_by_right(&self.quantity).expect("Invalid unit quantity");
+        let val: f32 = self.value / 10.0_f32.powf(exp as f32);
+        let base_unit = self.unit_str().unwrap();
         if exp == 0 {
             format!("{} {}", val, base_unit)
         } else {
             let prefix = prefix_map().get_by_right(&exp).expect("Invalid unit prefix");
             format!("{} {}{}", val, prefix, base_unit)
         }
+    }
+
+    pub fn unit_str(&self) -> Result<String, String> {
+        let mut used_units = HashMap::new();
+        for (index, power) in self.quantity.iter().enumerate() {
+            if *power != 0 {
+                let mut identity_quantity = vec![0; 7];
+                identity_quantity[index] = 1;
+                let base_unit = *unit_map().get_by_right(&identity_quantity).expect("Invalid identity quantity");
+                used_units.insert(base_unit, *power);
+            }
+        }
+        let mut unit = String::new();
+        let mut seen_negatives = false;
+        for (base_unit, power) in used_units.iter().sorted() {
+            if *power < 0 && !seen_negatives {
+                seen_negatives = true;
+                unit.push_str("/");
+            }
+            let power = power.abs();
+            if power == 1 {
+                unit.push_str(base_unit);
+            } else {
+                unit.push_str(&format!("{}^{}", base_unit, power));
+            }
+        }
+        Ok(unit.to_string())
     }
 
     pub fn is_scalar(&self) -> bool {
@@ -73,29 +108,15 @@ impl UnitVal {
         }
     }
 
-    fn meter() -> Quantity {
-        (1, 0, 0, 0, 0, 0, 0)
-    }
-
-    fn second() -> Quantity {
-        (0, 1, 0, 0, 0, 0, 0)
-    }
-
-    fn hertz() -> Quantity {
-        (0, -1, 0, 0, 0, 0, 0)
-    }
-
-    fn gram() -> Quantity {
-        (0, 0, 1, 0, 0, 0, 0)
-    }
-
-    fn ampere() -> Quantity {
-        (0, 0, 0, 1, 0, 0, 0)
-    }
-
-    fn unitless() -> Quantity {
-        (0, 0, 0, 0, 0, 0, 0)
-    }
+    fn meter() -> Quantity { vec![1, 0, 0, 0, 0, 0, 0] }
+    fn second() -> Quantity { vec![0, 1, 0, 0, 0, 0, 0] }
+    fn hertz() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
+    fn gram() -> Quantity { vec![0, 0, 1, 0, 0, 0, 0] }
+    fn ampere() -> Quantity { vec![0, 0, 0, 1, 0, 0, 0] }
+    fn kelvin() -> Quantity { vec![0, 0, 0, 0, 1, 0, 0] }
+    fn mole() -> Quantity { vec![0, 0, 0, 0, 0, 1, 0] }
+    fn candela() -> Quantity { vec![0, 0, 0, 0, 0, 0, 1] }
+    fn unitless() -> Quantity { vec![0, 0, 0, 0, 0, 0, 0] }
 }
 
 
@@ -109,12 +130,12 @@ impl UnitVal {
 
     pub fn powf(&self, exp: UnitVal) -> Self {
         let value = self.as_scalar().powf(exp.as_scalar());
-        UnitVal { value, quantity: self.quantity }
+        UnitVal { value, quantity: UnitVal::unitless() }
     }
 
     pub fn sqrt(&self) -> Self {
         let value = self.as_scalar().sqrt();
-        UnitVal { value, quantity: self.quantity }
+        UnitVal { value, quantity: UnitVal::unitless() }
     }
 
     pub fn fract(&self) -> f32 {
@@ -129,15 +150,9 @@ impl std::ops::Mul for UnitVal {
 
     fn mul(self, rhs: Self) -> Self::Output {
         let value = self.value * rhs.value;
-        let quantity = (
-            self.quantity.0 + rhs.quantity.0,
-            self.quantity.1 + rhs.quantity.1,
-            self.quantity.2 + rhs.quantity.2,
-            self.quantity.3 + rhs.quantity.3,
-            self.quantity.4 + rhs.quantity.4,
-            self.quantity.5 + rhs.quantity.5,
-            self.quantity.6 + rhs.quantity.6,
-        );
+        let a = self.quantity;
+        let b = rhs.quantity;
+        let quantity = (0..a.len()).map(|i| a[i] + b[i]).collect();
         UnitVal { value, quantity }
     }
 }
@@ -147,15 +162,9 @@ impl std::ops::Div for UnitVal {
 
     fn div(self, rhs: Self) -> Self::Output {
         let value = self.value / rhs.value;
-        let quantity = (
-            self.quantity.0 - rhs.quantity.0,
-            self.quantity.1 - rhs.quantity.1,
-            self.quantity.2 - rhs.quantity.2,
-            self.quantity.3 - rhs.quantity.3,
-            self.quantity.4 - rhs.quantity.4,
-            self.quantity.5 - rhs.quantity.5,
-            self.quantity.6 - rhs.quantity.6,
-        );
+        let a = self.quantity;
+        let b = rhs.quantity;
+        let quantity = (0..a.len()).map(|i| a[i] - b[i]).collect();
         UnitVal { value, quantity }
     }
 }
@@ -221,6 +230,9 @@ fn unit_map() -> &'static BiMap<&'static str, Quantity> {
         m.insert("g", UnitVal::gram());
         m.insert("Hz", UnitVal::hertz());
         m.insert("A", UnitVal::ampere());
+        m.insert("K", UnitVal::kelvin());
+        m.insert("mol", UnitVal::mole());
+        m.insert("cd", UnitVal::candela());
         m
     })
 }
