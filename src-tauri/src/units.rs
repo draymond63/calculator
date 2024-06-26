@@ -121,27 +121,34 @@ impl UnitVal {
 }
 
 
+impl std::fmt::Display for UnitVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
 impl UnitVal {
-    pub fn as_scalar(&self) -> f32 {
+    pub fn as_scalar(&self) -> Result<f32, String> {
         if self.quantity != UnitVal::unitless() {
-            panic!("Cannot convert unit to scalar: {:?}", self.to_string())
+            Err(format!("Cannot convert unit to scalar: {}", self))
+        } else {
+            Ok(self.value)
         }
-        self.value
     }
 
-    pub fn powf(&self, exp: UnitVal) -> Self {
-        let value = self.as_scalar().powf(exp.as_scalar());
-        UnitVal { value, quantity: UnitVal::unitless() }
+    pub fn powf(&self, exp: UnitVal) -> Result<Self, String> {
+        let value = self.as_scalar()?.powf(exp.as_scalar()?);
+        Ok(UnitVal::new(value, UnitVal::unitless()))
     }
 
-    pub fn sqrt(&self) -> Self {
-        let value = self.as_scalar().sqrt();
-        UnitVal { value, quantity: UnitVal::unitless() }
+    pub fn sqrt(&self) -> Result<Self, String> {
+        let value = self.as_scalar()?.sqrt();
+        Ok(UnitVal::new(value, UnitVal::unitless()))
     }
 
-    pub fn fract(&self) -> f32 {
-        let value = 1.0 / self.as_scalar();
-        value
+    pub fn fract(&self) -> Result<f32, String> {
+        let value = 1.0 / self.as_scalar()?;
+        Ok(value)
     }
 }
 

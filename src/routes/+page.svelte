@@ -9,7 +9,10 @@
 	$: latex, invoke('evaluate', { input: latex }).then((res) => {
 		console.log(res);
 		response = res
-	})
+	}).catch((err) => {
+		console.error(err);
+		response = err
+	});
 
 	const autoCommands = 'pi theta phi sqrt sum prod int';
 	const autoOperatorNames = 'sin cos tan log exp lim';

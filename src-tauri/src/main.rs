@@ -12,7 +12,6 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::result::Result;
-use std::convert::TryInto;
 
 mod evaluator;
 mod parser;
@@ -23,26 +22,27 @@ mod units;
 
 
 fn evaluate_sequence(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, String> {
-  let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
-  let mut context = Context::new();
-  let mut results = vec![None; inputs.len()];
+    let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
+    let mut context = Context::new();
+    let mut results = vec![None; inputs.len()];
 
-  for (i, input) in inputs.into_iter().enumerate() {        
-      let line_num: u32 = (i + 1).try_into().unwrap();
-      let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
-      let (_, expr) = parse(line).unwrap();
-      println!("Parsed: {:?}", expr);
-
-      let eval = eval_mut_context(&expr, &mut context);
-      if eval.is_err() {
-          return Err(format!("Failed to evaluate: {:?}", eval.unwrap_err()).into());
-      }
-      let res = eval.unwrap();
-      results[i] = res.clone();
-      let unit_val = res.unwrap();
-      println!("{} = {:?}", input, unit_val.to_string());
-  }
-  Ok(results)
+    for (i, input) in inputs.into_iter().enumerate() {        
+        let line_num: u32 = (i + 1) as u32;
+        let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
+        let parse_res = parse(line);
+        if let Ok((_, expr)) = parse_res {
+            println!("Parsed: {:?}", expr);
+            let eval = eval_mut_context(&expr, &mut context);
+            let res = eval?;
+            results[i] = res.clone();
+            if let Some(unit_val) = res {
+                println!("{} = {:?}", input, unit_val.to_string());
+            }
+        } else {
+            return Err(format!("Failed to parse: {:?}", parse_res.unwrap_err()).into());
+        }
+    }
+    Ok(results)
 }
 
 #[tauri::command]

@@ -8,10 +8,10 @@ pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result
     eval_mut_context_def(expr, &mut context, None)
 }
 
-fn eval_mut_context_def(expr: &Expr, mut context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
     match expr {
         EDefVar(var, expr) => {
-            let result = eval_mut_context_def(expr, &mut context, Some(&var))?.unwrap();
+            let result = eval_expr(expr, &context, Some(&var))?;
             if defining.is_some() {
                 return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", var, defining.unwrap()));
             }
@@ -52,7 +52,9 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
         ESub(expr1, expr2) => compose(expr1, expr2, |a, b| a - b),
         EMul(expr1, expr2) => compose(expr1, expr2, |a, b| a * b),
         EDiv(expr1, expr2) => compose(expr1, expr2, |a, b| a / b),
-        EExp(expr1, expr2) => compose(expr1, expr2, |a, b| a.powf(b)),
+        EExp(expr1, expr2) => {
+            eval_expr(expr1, context, defining)?.powf(eval_expr(expr2, context, defining)?)
+        },
         EVar(var) => {
             if defining.is_some() && var == defining.unwrap() {
                 return Err(format!("Variable '{var}' cannot be defined recursively"))
@@ -99,7 +101,7 @@ fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, 
         _ => None,
     };
     if let Some(callable) = callable {
-        Ok(UnitVal::scalar(callable(input.as_scalar())))
+        Ok(UnitVal::scalar(callable(input.as_scalar()?)))
     } else {
         Err(format!("Function '{name}' not defined"))
     }
@@ -129,7 +131,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
                 return Err("Square root does not support subscripts or superscripts".to_string());
             }
             let val = expr.params.get(0).unwrap();
-            Ok(eval_expr(val, context, defining)?.sqrt())
+            Ok(eval_expr(val, context, defining)?.sqrt()?)
         },
         "sum" => {
             if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
@@ -148,18 +150,18 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
             let ub = eval_mut_context_def(&subscript, &mut sum_context, defining)?.unwrap();
 
             // Ensure up and ub are integers
-            if up.fract() != 0.0 || ub.fract() != 0.0 {
+            if up.fract()? != 0.0 || ub.fract()? != 0.0 {
                 return Err("Summation bounds must be integers".to_string());
             }
-            let up = up.as_scalar() as i32 + 1;
-            let ub = ub.as_scalar() as i32;
+            let up = up.as_scalar()? as i32 + 1;
+            let ub = ub.as_scalar()? as i32;
 
             let mut sum = 0.0;
             for i in ub..up {
                 if ub_var.is_some() {
                     sum_context.vars.insert(ub_var.clone().unwrap(), UnitVal::scalar(i as f32));
                 }
-                sum += eval_expr(&param, &sum_context, defining)?.as_scalar();
+                sum += eval_expr(&param, &sum_context, defining)?.as_scalar()?;
             }
             Ok(UnitVal::scalar(sum))
         },
@@ -189,19 +191,19 @@ mod tests {
     #[test]
     fn evaluate_enum_test() {
         let expr = num(1234.0);
-        assert_eq!(evaluate(expr).as_scalar(), 1234.0);
+        assert_eq!(evaluate(expr).as_scalar().unwrap(), 1234.0);
     }
 
     #[test]
     fn evaluate_eadd_test() {
         let expr = EAdd(boxed_num(12.0), boxed_num(34.0));
-        assert_eq!(evaluate(expr).as_scalar(), 46.0);
+        assert_eq!(evaluate(expr).as_scalar().unwrap(), 46.0);
     }
 
     #[test]
     fn evaluate_easub_test() {
         let expr = ESub(boxed_num(12.0), boxed_num(34.0));
-        assert_eq!(evaluate(expr).as_scalar(), -22.0);
+        assert_eq!(evaluate(expr).as_scalar().unwrap(), -22.0);
     }
 
     #[test]
@@ -213,7 +215,7 @@ mod tests {
                 boxed_num(5.0),
             )),
         );
-        assert_eq!(evaluate(expr).as_scalar(), 9.2);
+        assert_eq!(evaluate(expr).as_scalar().unwrap(), 9.2);
     }
 
     #[test]
@@ -242,7 +244,8 @@ mod tests {
         assert_ne!(context.funcs.get("f"), None);
 
         let call = EFunc("f".to_string(), vec![num(1.0), num(2.0)]);
-        assert_eq!(eval_mut_context_def(&call, &mut context, None).unwrap().unwrap().as_scalar(), 3.0);
+        let unit_val = eval_mut_context_def(&call, &mut context, None).unwrap().unwrap();
+        assert_eq!(unit_val.as_scalar().unwrap(), 3.0);
     }
 
     #[test]
