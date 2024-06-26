@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use bimap::BiMap;
 use std::sync::OnceLock;
 
@@ -37,12 +36,11 @@ impl UnitVal {
         } 
         let exp = self.value.log10().floor() as i32 / 3 * 3;
         let val = self.value / 10.0_f32.powf(exp as f32);
-        println!("val: {}, exp: {}, quantity: {:?}", val, exp, self.quantity);
         let base_unit = unit_map().get_by_right(&self.quantity).expect("Invalid unit quantity");
         if exp == 0 {
             format!("{} {}", val, base_unit)
         } else {
-            let prefix = prefix_map().get_by_left(&exp).expect("Invalid unit prefix");
+            let prefix = prefix_map().get_by_right(&exp).expect("Invalid unit prefix");
             format!("{} {}{}", val, prefix, base_unit)
         }
     }
@@ -52,27 +50,26 @@ impl UnitVal {
     }
 
     fn from_unit(unit: &str) -> Result<(i32, Quantity), String> {
-        if unit.len() == 2 {
-            let (prefix, base_unit) = unit.chars().into_iter().collect_tuple().expect("Expected 2 chars");
-            let exp = *prefix_map().get_by_right(&prefix).expect("Invalid unit prefix"); // TODO: Propogate error
-            let quantity = UnitVal::from_base_unit(base_unit)?;
-            Ok((exp, quantity))
-        } else if unit.len() == 1 {
-            let base_unit = unit.chars().next().expect("Expected 1 char");
-            let quantity = UnitVal::from_base_unit(base_unit)?;
-            Ok((0, quantity))
-        } else if unit.len() == 0 {
-            Err("Empty unit received".to_string())
-        } else {
-            Err(format!("Invalid unit '{unit}'"))
+        if unit.is_empty() {
+            return Ok((0, UnitVal::unitless()));
         }
-    }
-
-    fn from_base_unit(unit: char) -> Result<Quantity, String> {
-        let quantity = unit_map().get_by_left(&unit);
-        match quantity {
-            Some(q) => Ok(q.clone()),
-            None => Err(format!("Invalid base unit '{unit}'"))
+        let possible_prefix = unit.chars().next().expect("Unit was empty but not caught by is_empty check");
+        if unit.len() > 1 && prefix_map().contains_left(&possible_prefix) {
+            let prefix = possible_prefix;
+            let base_unit = &unit[1..];
+            let exp = prefix_map().get_by_left(&prefix);
+            let quantity = unit_map().get_by_left(base_unit);
+            match (exp, quantity) {
+                (Some(e), Some(q)) => Ok((e.clone(), q.clone())),
+                (None, _) => Err(format!("Invalid unit prefix '{prefix}'")),
+                (_, None) => Err(format!("Invalid base unit '{base_unit}'"))
+            }
+        } else {
+            let quantity = unit_map().get_by_left(unit);
+            match quantity {
+                Some(q) => Ok((0, q.clone())),
+                None => Err(format!("Invalid base unit '{unit}'"))
+            }
         }
     }
 
@@ -82,6 +79,10 @@ impl UnitVal {
 
     fn second() -> Quantity {
         (0, 1, 0, 0, 0, 0, 0)
+    }
+
+    fn hertz() -> Quantity {
+        (0, -1, 0, 0, 0, 0, 0)
     }
 
     fn gram() -> Quantity {
@@ -194,31 +195,48 @@ impl std::ops::Sub for UnitVal {
     }
 }
 
-
-fn prefix_map() -> &'static BiMap<i32, char> {
-    static HASHMAP: OnceLock<BiMap<i32, char>> = OnceLock::new();
+// Implementation rom https://crates.io/crates/lazy_static
+fn prefix_map() -> &'static BiMap<char, i32> {
+    static HASHMAP: OnceLock<BiMap<char, i32>> = OnceLock::new();
     HASHMAP.get_or_init(|| {
         let mut m = BiMap::new();
-        m.insert(-12, 'p');
-        m.insert(-9, 'n');
-        m.insert(-6, 'u');
-        m.insert(-3, 'm');
-        m.insert(3, 'k');
-        m.insert(6, 'M');
-        m.insert(9, 'G');
-        m.insert(12, 'T');
+        m.insert('p', -12);
+        m.insert('n', -9);
+        m.insert('u', -6);
+        m.insert('m', -3);
+        m.insert('k', 3);
+        m.insert('M', 6);
+        m.insert('G', 9);
+        m.insert('T', 12);
         m
     })
 }
 
-fn unit_map() -> &'static BiMap<char, Quantity> {
-    static HASHMAP: OnceLock<BiMap<char, Quantity>> = OnceLock::new();
+fn unit_map() -> &'static BiMap<&'static str, Quantity> {
+    static HASHMAP: OnceLock<BiMap<&str, Quantity>> = OnceLock::new();
     HASHMAP.get_or_init(|| {
         let mut m = BiMap::new();
-        m.insert('m', UnitVal::meter());
-        m.insert('s', UnitVal::second());
-        m.insert('g', UnitVal::gram());
-        m.insert('A', UnitVal::ampere());
+        m.insert("m", UnitVal::meter());
+        m.insert("s", UnitVal::second());
+        m.insert("g", UnitVal::gram());
+        m.insert("Hz", UnitVal::hertz());
+        m.insert("A", UnitVal::ampere());
         m
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_unit() {
+        assert!(UnitVal::is_valid_unit("m"));
+        assert!(UnitVal::is_valid_unit("s"));
+        assert!(UnitVal::is_valid_unit("Hz"));
+        assert!(UnitVal::is_valid_unit("km"));
+        assert!(UnitVal::is_valid_unit("mm"));
+        assert!(UnitVal::is_valid_unit("mA"));
+    }
 }
