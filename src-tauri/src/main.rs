@@ -9,7 +9,6 @@ use crate::{
 };
 
 use std::env;
-use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::result::Result;
@@ -23,7 +22,7 @@ mod units;
 
 
 
-fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, Box<dyn Error>> {
+fn evaluate_sequence(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, String> {
   let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
   let mut context = Context::new();
   let mut results = vec![None; inputs.len()];
@@ -46,6 +45,12 @@ fn evaluate(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, Box<dyn Error>> {
   Ok(results)
 }
 
+#[tauri::command]
+fn evaluate(input: &str) -> Result<Vec<Option<UnitVal>>, String> {
+    let inputs = input.lines().collect::<Vec<&str>>();
+    evaluate_sequence(inputs)
+}
+
 
 fn main() {
   let args: Vec<String> = env::args().collect();
@@ -55,10 +60,10 @@ fn main() {
     let mut test_file = File::open(file_path.unwrap()).unwrap();
     let mut input_file_contents = String::new();
     test_file.read_to_string(&mut input_file_contents).unwrap();
-    let inputs = input_file_contents.lines().collect::<Vec<&str>>();
-    evaluate(inputs).unwrap();
+    evaluate(&input_file_contents.as_str()).unwrap();
   } else {
     tauri::Builder::default()
+      .invoke_handler(tauri::generate_handler![evaluate])
       .run(tauri::generate_context!())
       .expect("error while running tauri application");
   }

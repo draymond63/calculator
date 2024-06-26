@@ -1,8 +1,16 @@
-<script>
+<script lang="ts">
 	import { MathQuill } from 'svelte-mathquill';
-	import Graph from './Graph.svelte';
+	// import Graph from './Graph.svelte';
+	import { invoke } from '@tauri-apps/api/tauri';
 
-	let latex = '';
+	let latex = '2m/5s';
+	let response: any = '';
+
+	$: latex, invoke('evaluate', { input: latex }).then((res) => {
+		console.log(res);
+		response = res
+	})
+
 	const autoCommands = 'pi theta phi sqrt sum prod int';
 	const autoOperatorNames = 'sin cos tan log exp lim';
 </script>
@@ -16,8 +24,9 @@
 		bind:latex="{latex}" 
 		config={({ autoCommands, autoOperatorNames })}
 	/>
+	<p>{latex} = {response}</p>
 	<br />
-	<Graph equation="{latex}" />
+	<!-- <Graph equation="{latex}" /> -->
 </section>
 
 <style>

@@ -1,6 +1,7 @@
 use bimap::BiMap;
 use itertools::Itertools;
 use std::{collections::HashMap, sync::OnceLock, vec};
+use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitVal {
@@ -201,6 +202,15 @@ impl std::ops::Sub for UnitVal {
         let value = self.value - rhs.value;
         let quantity = self.quantity;
         UnitVal { value, quantity }
+    }
+}
+
+impl Serialize for UnitVal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 
