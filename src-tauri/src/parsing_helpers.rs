@@ -1,7 +1,7 @@
 use crate::types::{Span, ParseError, ParseResultStr};
 
 
-use nom::character::complete::{alphanumeric1, space0, char};
+use nom::character::complete::{alphanumeric1, space0};
 use nom::bytes::complete::take_until;
 
 
@@ -55,20 +55,34 @@ where
     }
 }
 
-pub fn unwrap(begin: char, end: char) -> impl Fn(Span) -> ParseResultStr
+pub fn unwrap(begin: &str, end: &str) -> impl Fn(Span) -> ParseResultStr
 {
+    let begin = begin.to_string();
+    let end = end.to_string();
     move |input| {
-        let (input, _) = char(begin)(input)?;
-        let (input, res) = take_until(&end.to_string()[..])(input)?;
-        let (input, _) = char(end)(input)?;
+        let (input, _) = tag(&begin)(input)?;
+        let (input, res) = take_until(&end[..])(input)?;
+        let (input, _) = tag(&end)(input)?;
         Ok((input, res))
     }
 }
 
-pub fn safe_unwrap(begin: char, end: char) -> impl Fn(Span) -> (Span, Span)
+pub fn tag(s: &str) -> impl Fn(Span) -> ParseResultStr
 {
+    let s = s.bytes().collect::<Vec<u8>>();
     move |input| {
-        let result = unwrap(begin, end)(input);
+        let parser = nom::bytes::complete::tag(s.as_slice());
+        let (input, res) = parser(input)?;
+        Ok((input, res))
+    }
+}
+
+pub fn safe_unwrap(begin: &str, end: &str) -> impl Fn(Span) -> (Span, Span)
+{
+    let begin = begin.to_string();
+    let end = end.to_string();
+    move |input| {
+        let result: Result<(nom_locate::LocatedSpan<&str>, nom_locate::LocatedSpan<&str>), nom::Err<ParseError>> = unwrap(&begin, &end)(input);
         match result {
             Err(_) => (input, input),
             _ => result.unwrap()

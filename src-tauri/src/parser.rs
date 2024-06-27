@@ -103,7 +103,10 @@ fn parse_func_call(input: Span) -> ParseResult {
 }
 
 fn parse_call_params(input: Span) -> ParseResultVec {
-    let (rest, param_insides) = unwrap('(', ')')(input)?;
+    let (rest, param_insides) = alt((
+        unwrap("(", ")"),
+        unwrap("\\left(", "\\right)"),
+    ))(input)?;
     let (is_empty, params) = separated_list0(char(','), parse_math_expr)(param_insides)?;
     if !is_empty.is_empty() {
         return Err(nom::Err::Failure(ParseError::new("Call param input remain unparsed", is_empty)));
@@ -132,13 +135,13 @@ fn parse_latex(input: Span) -> ParseResult {
         (remaining_input, latex_expr.subscript) = subscript.unwrap();
         found_params = true;
     }
-    let mut params = unwrap('{', '}')(remaining_input);
+    let mut params = unwrap("{", "}")(remaining_input);
     while params.is_ok() {
         let (rest, inside) = params.unwrap();
         // println!("latex param -> component: {:?}", inside.fragment());
         let (_, expr) = prepend_cut(parse_math_expr, "In latex param")(inside)?;
         latex_expr.params.push(expr);
-        params = unwrap('{', '}')(rest);
+        params = unwrap("{", "}")(rest);
         remaining_input = rest;
         found_params = true;
     }
@@ -155,7 +158,7 @@ fn parse_latex(input: Span) -> ParseResult {
 
 fn parse_latex_param(input: Span, c: char, allow_def: bool) -> BaseParseResult<Option<Box<Expr>>> {
     let (input, _) = char(c)(input)?;
-    let (rest, inside) = safe_unwrap('{', '}')(input);
+    let (rest, inside) = safe_unwrap("{", "}")(input);
     let (_, expr) = if allow_def {
         prepend_cut(parse_math_expr_or_def, "In latex param")(inside)?
     } else {

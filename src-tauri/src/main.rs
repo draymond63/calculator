@@ -29,7 +29,7 @@ fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> 
         println!("Parsed: {:?}", expr);
         let eval = eval_mut_context(&expr, context);
         let res = eval?;
-        println!("{} = {}", line.fragment(), res.clone().unwrap());
+        println!("{} = {:?}", line.fragment(), res);
         Ok(res)
     } else {
         Err(format!("Failed to parse: {:?}", parse_res.unwrap_err()).into())
