@@ -30,6 +30,12 @@
         latexes = [...latexes, ''];
     }
 
+    function dropRow(index: number) {
+        if (latexes.length > 1) {
+            latexes = latexes.filter((_, i) => i !== index);
+        }
+    }
+
 	const autoCommands = 'pi theta phi sqrt sum prod int';
 	const autoOperatorNames = 'sin cos tan log exp lim';
 </script>
@@ -43,6 +49,7 @@
                 on:enter={addLatex}
                 on:upOutOf={() => focusRow(i - 1)}
                 on:downOutOf={() => focusRow(i + 1)}
+                on:deleteOutOf={() => dropRow(i)}
                 class="mathquill"
                 noBorderOutline
                 autofocus
