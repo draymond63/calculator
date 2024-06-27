@@ -20,35 +20,39 @@ mod types;
 mod units;
 
 
+type EvalResult = Result<Option<UnitVal>, String>;
 
-fn evaluate_sequence(inputs: Vec<&str>) -> Result<Vec<Option<UnitVal>>, String> {
+
+fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> EvalResult {
+    let parse_res = parse(line);
+    if let Ok((_, expr)) = parse_res {
+        println!("Parsed: {:?}", expr);
+        let eval = eval_mut_context(&expr, context);
+        let res = eval?;
+        println!("{} = {}", line.fragment(), res.clone().unwrap());
+        Ok(res)
+    } else {
+        Err(format!("Failed to parse: {:?}", parse_res.unwrap_err()).into())
+    }
+}
+
+fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
     let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
     let mut context = Context::new();
-    let mut results = vec![None; inputs.len()];
+    let mut results = vec![];
 
     for (i, input) in inputs.into_iter().enumerate() {        
         let line_num: u32 = (i + 1) as u32;
         let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
-        let parse_res = parse(line);
-        if let Ok((_, expr)) = parse_res {
-            println!("Parsed: {:?}", expr);
-            let eval = eval_mut_context(&expr, &mut context);
-            let res = eval?;
-            results[i] = res.clone();
-            if let Some(unit_val) = res {
-                println!("{} = {:?}", input, unit_val.to_string());
-            }
-        } else {
-            return Err(format!("Failed to parse: {:?}", parse_res.unwrap_err()).into());
-        }
+        results.push(evaluate_line(line, &mut context));
     }
-    Ok(results)
+    results
 }
 
 #[tauri::command]
-fn evaluate(input: &str) -> Result<Vec<Option<UnitVal>>, String> {
+async fn evaluate(input: &str) -> Result<Vec<EvalResult>, ()> {
     let inputs = input.lines().collect::<Vec<&str>>();
-    evaluate_sequence(inputs)
+    Ok(evaluate_sequence(inputs))
 }
 
 
@@ -60,7 +64,8 @@ fn main() {
     let mut test_file = File::open(file_path.unwrap()).unwrap();
     let mut input_file_contents = String::new();
     test_file.read_to_string(&mut input_file_contents).unwrap();
-    evaluate(&input_file_contents.as_str()).unwrap();
+    let inputs = input_file_contents.lines().collect::<Vec<&str>>();
+    evaluate_sequence(inputs);
   } else {
     tauri::Builder::default()
       .invoke_handler(tauri::generate_handler![evaluate])

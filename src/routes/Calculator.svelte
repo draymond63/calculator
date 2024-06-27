@@ -3,15 +3,21 @@
 	import { invoke } from '@tauri-apps/api/tauri';
 
 	let latexes = [''];
-	let response: any = [''];
+	let results: any = [];
 
 	$: latexes, invoke('evaluate', { input: latexes.join('\n') }).then((res: any) => {
 		console.log("Response", res);
-		response = res
+		results = res.map(parseResult);
 	}).catch((err) => {
 		console.error(err); 
-		response = [];
+		results = [];
 	});
+
+    function parseResult(res: any) {
+        if ('Ok' in res) return res['Ok'];
+        else if ('Err' in res) return res['Err'];
+        else return JSON.stringify(res);
+    }
 
     function onEnter(index: number) {
         if (index === latexes.length - 1) {
@@ -43,8 +49,8 @@
                 config={({ autoCommands, autoOperatorNames })}
                 on:enter={() => onEnter(i)}
             />
-            {#if response[i]}
-                <p>{response[i]}</p>
+            {#if results[i]}
+                <p>{results[i]}</p>
             {/if}
         </div>
     {/each}
