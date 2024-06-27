@@ -19,17 +19,11 @@
         else return JSON.stringify(res);
     }
 
-    function onEnter(index: number) {
-        if (index === latexes.length - 1) {
-            addLatex();
-        }
-        focusNextRow();
-    }
-
-    function focusNextRow() {
-        const inputs = document.querySelectorAll('.mq-editable-field');
-        const lastInput = inputs[inputs.length - 1];
-        lastInput.focus();
+    function focusRow(index: number) {
+        const input = document.getElementById(`input-${index}`);
+        const mathquill = input?.querySelector('.mathquill');
+        console.log("Input", mathquill);
+        (mathquill as HTMLElement)?.focus(); // TODO: This focus does nothing
     }
 
     function addLatex() {
@@ -42,12 +36,16 @@
 
 <section>
 	{#each latexes as latex, i}
-        <div class="input-section" id={`input-{i}`}>
+        <div class="input-row" id={`input-${i}`}>
             <MathQuill
-                noBorderOutline
                 bind:latex="{latex}"
                 config={({ autoCommands, autoOperatorNames })}
-                on:enter={() => onEnter(i)}
+                on:enter={addLatex}
+                on:upOutOf={() => focusRow(i - 1)}
+                on:downOutOf={() => focusRow(i + 1)}
+                class="mathquill"
+                noBorderOutline
+                autofocus
             />
             {#if results[i]}
                 <p>{results[i]}</p>
@@ -68,18 +66,15 @@
 		align-items: center;
 	}
 
-    .input-section {
+    .input-row {
         display: flex;
         flex-direction: row;
         justify-content: space-between;
         align-items: center;
         width: 100%;
         border: 1px solid black;
+        box-sizing: content-box;
         padding: .2rem;
-    }
-
-    .input-section::first-child {
-        margin: 50rem;
-        width: 100%;
+    	font-size: 1.2em;
     }
 </style>
