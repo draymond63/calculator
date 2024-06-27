@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { MathQuill } from 'svelte-mathquill';
 	import { invoke } from '@tauri-apps/api/tauri';
+    import copyicon from '$lib/images/copy-icon.svg';
 
 	let latexes = [''];
 	let results: any = [];
@@ -36,6 +37,11 @@
         }
     }
 
+    function copyClipboard(line: string) {
+        navigator.clipboard.writeText(line);
+        console.log("Copied to clipboard", line);
+    }
+
 	const autoCommands = 'pi theta phi sqrt sum prod int';
 	const autoOperatorNames = 'sin cos tan log exp lim';
 </script>
@@ -57,6 +63,9 @@
             {#if results[i]}
                 <p>{results[i]}</p>
             {/if}
+            <button class="icon" on:click={() => copyClipboard(latex)}>
+                <img src={copyicon} alt="Copy" />
+            </button>
         </div>
     {/each}
     <button on:click={addLatex}>Add</button>
@@ -83,5 +92,11 @@
         box-sizing: content-box;
         padding: .2rem;
     	font-size: 1.2em;
+    }
+
+    .icon {
+        background: none;
+        border: none;
+        cursor: pointer;        
     }
 </style>
