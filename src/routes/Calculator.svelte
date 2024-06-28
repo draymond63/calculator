@@ -56,4 +56,8 @@
 		justify-content: center;
 		align-items: center;
 	}
+
+    button {
+        margin-top: .5rem;
+    }
 </style>
