@@ -3,8 +3,7 @@
 
 use crate::{
   evaluator::eval_mut_context,
-  types::{Context, Span},
-  error::Error,
+  types::{Context, Span, CResult},
   parser::parse,
   units::UnitVal,
 };
@@ -22,7 +21,7 @@ mod units;
 mod error;
 
 
-type EvalResult = Result<Option<UnitVal>, Error>;
+type EvalResult = CResult<Option<UnitVal>>;
 
 
 fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> EvalResult {

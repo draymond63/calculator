@@ -1,15 +1,15 @@
-use crate::types::{Context, Expr::{self, *}, LatexExpr};
+use crate::types::{Context, CResult, LatexExpr, Expr::{self, *}};
 use crate::units::UnitVal;
 use crate::error::Error;
 
 use itertools::Itertools;
 
 
-pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<UnitVal>, Error> {
+pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> CResult<Option<UnitVal>> {
     eval_mut_context_def(expr, &mut context, None)
 }
 
-fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, Error> {
+fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&str>) -> CResult<Option<UnitVal>> {
     match expr {
         EDefVar(var, expr) => {
             let result = eval_expr(expr, &context, Some(&var))?;
@@ -36,21 +36,21 @@ fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&st
     }
 }
 
-fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error>
+fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> CResult<UnitVal>
     where F: Fn(UnitVal, UnitVal) -> UnitVal
 {
     Ok(func(eval_expr(expr1, context, defining)?, eval_expr(expr2, context, defining)?))
 }
 
-fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
+fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> CResult<UnitVal> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
 
     match expr {
         ENum(num) => Ok(num.clone()),
-        EAdd(expr1, expr2) => compose(expr1, expr2, |a, b| a + b),
-        ESub(expr1, expr2) => compose(expr1, expr2, |a, b| a - b),
+        EAdd(expr1, expr2) => { eval_expr(expr1, context, defining)? + eval_expr(expr2, context, defining)? },
+        ESub(expr1, expr2) => { eval_expr(expr1, context, defining)? - eval_expr(expr2, context, defining)? },
         EMul(expr1, expr2) => compose(expr1, expr2, |a, b| a * b),
         EDiv(expr1, expr2) => compose(expr1, expr2, |a, b| a / b),
         EExp(expr1, expr2) => {
@@ -90,7 +90,7 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
     }
 }
 
-fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
+fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> CResult<UnitVal> {
     if inputs.len() > 1 {
         return Err(Error::EvalError("Default functions only accept one argument".to_string()));
     }
@@ -108,7 +108,7 @@ fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, 
     }
 }
 
-fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
+fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CResult<UnitVal> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };

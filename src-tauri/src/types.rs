@@ -3,7 +3,10 @@ use nom;
 use nom_locate::LocatedSpan;
 
 use crate::units::UnitVal;
-use crate::error::ParseError;
+use crate::error::{Error, ParseError};
+
+
+pub type CResult<T> = Result<T, Error>;
 
 
 #[derive(Debug, PartialEq, Clone)]

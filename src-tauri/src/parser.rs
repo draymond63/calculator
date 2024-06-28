@@ -1,4 +1,4 @@
-use crate::types::{*, Expr::*};
+use crate::types::{CResult, *, Expr::*};
 use crate::error::{Error, ParseError};
 use crate::parsing_helpers::*;
 use crate::units::UnitVal;
@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 
 
-pub(crate) fn parse(input: Span) -> Result<Expr, Error> {
+pub(crate) fn parse(input: Span) -> CResult<Expr> {
     let result = parse_math_expr_or_def(input);
     match result {
         Ok((input, expr)) => {

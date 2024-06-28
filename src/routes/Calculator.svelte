@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { MathQuill } from 'svelte-mathquill';
 	import { invoke } from '@tauri-apps/api/tauri';
+    // https://icones.js.org/collection/material-symbols-light
     import copyicon from '$lib/images/copy-icon.svg';
 
 	let latexes = [''];
@@ -15,9 +16,16 @@
 	});
 
     function parseResult(res: any) {
-        if ('Ok' in res) return res['Ok'];
-        else if ('Err' in res) return res['Err'];
+        if ('Ok' in res) return res.Ok;
+        else if ('Err' in res) return parseError(res.Err);
         else return JSON.stringify(res);
+    }
+
+    function parseError(err: any) {
+        if ('ParseError' in err)return err.ParseError?.source?.message;
+        else if ('EvalError' in err) return err.EvalError;
+        else if ('UnitError' in err) return err.UnitError;
+        else return JSON.stringify(err);
     }
 
     function focusRow(index: number) {
@@ -27,7 +35,7 @@
         (mathquill as HTMLElement)?.focus(); // TODO: This focus does nothing
     }
 
-    function addLatex() {
+    function addRow() {
         latexes = [...latexes, ''];
     }
 
@@ -52,7 +60,7 @@
             <MathQuill
                 bind:latex="{latex}"
                 config={({ autoCommands, autoOperatorNames })}
-                on:enter={addLatex}
+                on:enter={addRow}
                 on:upOutOf={() => focusRow(i - 1)}
                 on:downOutOf={() => focusRow(i + 1)}
                 on:deleteOutOf={() => dropRow(i)}
@@ -68,7 +76,7 @@
             </button>
         </div>
     {/each}
-    <button on:click={addLatex}>Add</button>
+    <button on:click={addRow}>Add</button>
 	<br />
 </section>
 

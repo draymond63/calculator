@@ -1,9 +1,11 @@
 use crate::error::Error;
+use crate::types::CResult;
 
 use bimap::BiMap;
 use itertools::Itertools;
 use std::{collections::HashMap, sync::OnceLock, vec};
 use serde::Serialize;
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitVal {
@@ -56,13 +58,16 @@ impl UnitVal {
         }
     }
 
-    pub fn unit_str(&self) -> Result<String, String> {
+    pub fn unit_str(&self) -> CResult<String> {
         let mut used_units = HashMap::new();
         for (index, power) in self.quantity.iter().enumerate() {
             if *power != 0 {
                 let mut identity_quantity = vec![0; 7];
                 identity_quantity[index] = 1;
-                let base_unit = *unit_map().get_by_right(&identity_quantity).expect("Invalid identity quantity");
+                let base_unit = match unit_map().get_by_right(&identity_quantity) {
+                    Some(unit) => *unit,
+                    None => return Err(Error::UnitError(format!("Invalid unit quantity: {:?}", identity_quantity)))
+                };
                 used_units.insert(base_unit, *power);
             }
         }
@@ -180,15 +185,15 @@ impl std::ops::Div for UnitVal {
 }
 
 impl std::ops::Add for UnitVal {
-    type Output = Self;
+    type Output = CResult<Self>;
 
     fn add(self, rhs: Self) -> Self::Output {
         if self.quantity != rhs.quantity {
-            panic!("Cannot add units with different quantities: {:?} and {:?}", self.to_string(), rhs.to_string())
+            return Err(Error::UnitError(format!("Cannot add units with different quantities: {:?} and {:?}", self.to_string(), rhs.to_string())));
         }
         let value = self.value + rhs.value;
         let quantity = self.quantity;
-        UnitVal { value, quantity }
+        Ok(UnitVal { value, quantity })
     }
 }
 
@@ -202,15 +207,15 @@ impl std::ops::AddAssign for UnitVal {
 }
 
 impl std::ops::Sub for UnitVal {
-    type Output = Self;
+    type Output = CResult<Self>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         if self.quantity != rhs.quantity {
-            panic!("Cannot subtract units with different quantities: {:?} and {:?}", self.to_string(), rhs.to_string())
+            return Err(Error::UnitError(format!("Cannot subtract units with different quantities: {:?} and {:?}", self.to_string(), rhs.to_string())));
         }
         let value = self.value - rhs.value;
         let quantity = self.quantity;
-        UnitVal { value, quantity }
+        Ok(UnitVal { value, quantity })
     }
 }
 
