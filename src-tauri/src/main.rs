@@ -65,7 +65,11 @@ fn main() {
     let mut input_file_contents = String::new();
     test_file.read_to_string(&mut input_file_contents).unwrap();
     let inputs = input_file_contents.lines().collect::<Vec<&str>>();
-    evaluate_sequence(inputs);
+    for (i, result) in evaluate_sequence(inputs.clone()).iter().enumerate() {
+      if let Ok(Some(val)) = result {
+        println!("{} = {}", inputs[i], val)
+      } 
+    }
   } else {
     tauri::Builder::default()
       .invoke_handler(tauri::generate_handler![evaluate])

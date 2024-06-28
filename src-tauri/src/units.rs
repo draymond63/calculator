@@ -25,14 +25,11 @@ impl UnitVal {
     }
 
     pub fn new_value(value: f32, unit: &str) -> Self {
-        let (exp, quantity) = UnitVal::from_unit(unit).unwrap();
+        let (exp, base_unit) = UnitVal::from_unit(unit).unwrap();
         let scale_factor = 10.0_f32.powf(exp as f32);
         let value = value * scale_factor;
-        UnitVal::new(value, quantity)
-    }
-
-    pub fn scalar(value: f32) -> Self {
-        UnitVal { value, quantity: UnitVal::unitless() }
+        let value = UnitVal::new(value - 1.0, base_unit.quantity.clone());
+        (base_unit + value).unwrap()
     }
 
     pub fn is_valid_unit(unit: &str) -> bool {
@@ -59,18 +56,10 @@ impl UnitVal {
     }
 
     pub fn unit_str(&self) -> CResult<String> {
-        let mut used_units = HashMap::new();
-        for (index, power) in self.quantity.iter().enumerate() {
-            if *power != 0 {
-                let mut identity_quantity = vec![0; 7];
-                identity_quantity[index] = 1;
-                let base_unit = match unit_map().get_by_right(&identity_quantity) {
-                    Some(unit) => *unit,
-                    None => return Err(Error::UnitError(format!("Invalid unit quantity: {:?}", identity_quantity)))
-                };
-                used_units.insert(base_unit, *power);
-            }
+        if self.quantity == UnitVal::unitless() {
+            return Ok(String::from(""))
         }
+        let used_units = UnitVal::compile_used_units(&self.quantity)?;
         let mut unit = String::new();
         let mut seen_negatives = false;
         for (base_unit, power) in used_units.iter().sorted() {
@@ -88,27 +77,66 @@ impl UnitVal {
         Ok(unit.to_string())
     }
 
+    /// Returns a map of string units and their exponents that summarize the given quantity
+    fn compile_used_units(quantity: &Quantity) -> CResult<HashMap<&str, i32>> {
+        let max_iter = 5;
+        let avail_units = unit_map();
+        let mut used_units = HashMap::new();
+        let mut iterations = 0;
+        let mut current_quantity = quantity.clone();
+
+        while UnitVal::quantity_cost(&current_quantity) != 0 && iterations < max_iter {
+            let mut best_unit = "";
+            let mut best_cost = UnitVal::quantity_cost(&current_quantity);
+            let mut remaining_quantity = current_quantity.clone();
+            for (name, unit) in avail_units.iter() {
+                let next_quantity = UnitVal::compose_quantities(&current_quantity, &unit.quantity, |x, y| x - y);
+                let unit_cost = UnitVal::quantity_cost(&next_quantity);
+                // println!("Dropping {name} from {current_quantity:?} results in {next_quantity:?} with cost of {unit_cost}");
+                if unit_cost < best_cost {
+                    best_cost = unit_cost;
+                    best_unit = *name;
+                    remaining_quantity = next_quantity;
+                }
+            }
+            let current_unit_power = used_units.get(best_unit).unwrap_or(&0);
+            used_units.insert(best_unit, current_unit_power + 1);
+            iterations += 1;
+            current_quantity = remaining_quantity;
+            // println!("Cost at end of round: {} ({current_quantity:?})", UnitVal::quantity_cost(&current_quantity));
+        }
+        if iterations >= max_iter {
+            Err(Error::UnitError(format!("Unable to compile units to string given {quantity:?}. {current_quantity:?} still remains")))
+        } else {
+            Ok(used_units)
+        }
+    }
+
+    fn quantity_cost(quantity: &Quantity) -> i32 {
+        quantity.iter().map(|x| x.abs()).sum()
+    }
+
     pub fn is_scalar(&self) -> bool {
         self.quantity == UnitVal::unitless()
     }
 
-    fn from_unit(unit: &str) -> Result<(i32, Quantity), Error> {
+    fn from_unit(unit: &str) -> Result<(i32, UnitVal), Error> {
         if unit.is_empty() {
-            return Ok((0, UnitVal::unitless()));
+            return Ok((0, UnitVal::scalar(1.0)));
         }
         let possible_prefix = unit.chars().next().expect("Unit was empty but not caught by is_empty check");
         if unit.len() > 1 && prefix_map().contains_left(&possible_prefix) {
             let prefix = possible_prefix;
             let base_unit = &unit[1..];
             let exp = prefix_map().get_by_left(&prefix);
-            let quantity = unit_map().get_by_left(base_unit);
+            let quantity = unit_map().get(base_unit);
             match (exp, quantity) {
                 (Some(e), Some(q)) => Ok((e.clone(), q.clone())),
                 (None, _) => Err(Error::UnitError(format!("Invalid unit prefix '{prefix}'"))),
                 (_, None) => Err(Error::UnitError(format!("Invalid base unit '{base_unit}'")))
             }
         } else {
-            let quantity = unit_map().get_by_left(unit);
+            let quantity = unit_map().get(unit);
             match quantity {
                 Some(q) => Ok((0, q.clone())),
                 None => Err(Error::UnitError(format!("Invalid base unit '{unit}'")))
@@ -116,14 +144,19 @@ impl UnitVal {
         }
     }
 
-    fn meter() -> Quantity { vec![1, 0, 0, 0, 0, 0, 0] }
-    fn second() -> Quantity { vec![0, 1, 0, 0, 0, 0, 0] }
-    fn hertz() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
-    fn gram() -> Quantity { vec![0, 0, 1, 0, 0, 0, 0] }
-    fn ampere() -> Quantity { vec![0, 0, 0, 1, 0, 0, 0] }
-    fn kelvin() -> Quantity { vec![0, 0, 0, 0, 1, 0, 0] }
-    fn mole() -> Quantity { vec![0, 0, 0, 0, 0, 1, 0] }
-    fn candela() -> Quantity { vec![0, 0, 0, 0, 0, 0, 1] }
+    fn compose_quantities(q1: &Quantity, q2: &Quantity, func: impl Fn(i32, i32) -> i32) -> Quantity {
+        (0..q1.len()).map(|i| func(q1[i], q2[i])).collect()
+    }
+
+    pub fn scalar(value: f32) -> UnitVal { UnitVal::new(value, UnitVal::unitless()) }
+    fn meter(value: f32) -> UnitVal { UnitVal::new(value, vec![1, 0, 0, 0, 0, 0, 0]) }
+    fn second(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 1, 0, 0, 0, 0, 0]) }
+    fn hertz(value: f32) -> UnitVal { UnitVal::new(value, vec![0, -1, 0, 0, 0, 0, 0]) }
+    fn gram(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 0, 1, 0, 0, 0, 0]) }
+    fn ampere(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 0, 0, 1, 0, 0, 0]) }
+    fn kelvin(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 0, 0, 0, 1, 0, 0]) }
+    fn mole(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 0, 0, 0, 0, 1, 0]) }
+    fn candela(value: f32) -> UnitVal { UnitVal::new(value, vec![0, 0, 0, 0, 0, 0, 1]) }
     fn unitless() -> Quantity { vec![0, 0, 0, 0, 0, 0, 0] }
 }
 
@@ -136,7 +169,7 @@ impl std::fmt::Display for UnitVal {
 
 impl UnitVal {
     pub fn as_scalar(&self) -> Result<f32, Error> {
-        if self.quantity != UnitVal::unitless() {
+        if self.quantity != vec![0, 0, 0, 0, 0, 0, 0] {
             Err(Error::UnitError(format!("Cannot convert unit to scalar: {}", self)))
         } else {
             Ok(self.value)
@@ -150,7 +183,7 @@ impl UnitVal {
             Ok(self.powi(exp))
         } else {
             let value = self.as_scalar()?.powf(exp);
-            Ok(UnitVal::new(value, UnitVal::unitless()))
+            Ok(UnitVal::scalar(value))
         }
     }
 
@@ -164,7 +197,7 @@ impl UnitVal {
 
     pub fn sqrt(&self) -> Result<Self, Error> {
         let value = self.as_scalar()?.sqrt();
-        Ok(UnitVal::new(value, UnitVal::unitless()))
+        Ok(UnitVal::scalar(value))
     }
 
     pub fn fract(&self) -> Result<f32, Error> {
@@ -259,18 +292,20 @@ fn prefix_map() -> &'static BiMap<char, i32> {
     })
 }
 
-fn unit_map() -> &'static BiMap<&'static str, Quantity> {
-    static HASHMAP: OnceLock<BiMap<&str, Quantity>> = OnceLock::new();
+fn unit_map() -> &'static HashMap<&'static str, UnitVal> {
+    static HASHMAP: OnceLock<HashMap<&str, UnitVal>> = OnceLock::new();
     HASHMAP.get_or_init(|| {
-        let mut m = BiMap::new();
-        m.insert("m", UnitVal::meter());
-        m.insert("s", UnitVal::second());
-        m.insert("g", UnitVal::gram());
-        m.insert("Hz", UnitVal::hertz());
-        m.insert("A", UnitVal::ampere());
-        m.insert("K", UnitVal::kelvin());
-        m.insert("mol", UnitVal::mole());
-        m.insert("cd", UnitVal::candela());
+        let mut m = HashMap::new();
+        m.insert("C", UnitVal::kelvin(272.15));
+        m.insert("N", UnitVal::new(1000.0, vec![1, -2, 1, 0, 0, 0, 0]));
+        m.insert("m", UnitVal::meter(1.0));
+        m.insert("s", UnitVal::second(1.0));
+        m.insert("g", UnitVal::gram(1.0));
+        m.insert("Hz", UnitVal::hertz(1.0));
+        m.insert("A", UnitVal::ampere(1.0));
+        m.insert("K", UnitVal::kelvin(1.0));
+        m.insert("mol", UnitVal::mole(1.0));
+        m.insert("cd", UnitVal::candela(1.0));
         m
     })
 }

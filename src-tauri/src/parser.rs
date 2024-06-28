@@ -60,36 +60,36 @@ fn parse_def(input: Span) -> ParseResult {
 }
 
 fn parse_math_expr(input: Span) -> ParseResult {
-    println!("expr -> term: {:?}", input.fragment());
+    // println!("expr -> term: {:?}", input.fragment());
     let (input, num1) = parse_term(input)?;
     let term_splitters = alt((tag("+"), tag("-"))); 
-    println!("expr -> term2: {:?}", input.fragment());
+    // println!("expr -> term2: {:?}", input.fragment());
     let (input, exprs) = many0(tuple((term_splitters, parse_term)))(input)?;
-    println!("expr done");
+    // println!("expr done");
     Ok((input, map_ops(num1, exprs)))
 }
 
 fn parse_term(input: Span) -> ParseResult {
-    println!("term -> factor: {:?}", input.fragment());
+    // println!("term -> factor: {:?}", input.fragment());
     let (input, num1) = parse_term_no_fractions(input)?;
     let term_splitters = alt((tag("/"), tag("*"), tag("\\cdot"))); 
-    println!("term -> factor2: {:?}", input.fragment());
+    // println!("term -> factor2: {:?}", input.fragment());
     let (input, exprs) = many0(tuple((term_splitters, parse_term_no_fractions)))(input)?;
-    println!("term done");
+    // println!("term done");
     Ok((input, map_ops(num1, exprs)))
 }
 
 fn parse_term_no_fractions(input: Span) -> ParseResult {
-    println!("factor -> insides: {:?}", input.fragment());
+    // println!("factor -> insides: {:?}", input.fragment());
     let (input, base) = parse_component(input)?;
-    println!("factor -> factor: {:?}", input.fragment());
+    // println!("factor -> factor: {:?}", input.fragment());
     let (input, exprs) = many0(tuple((tag("^"), parse_term_no_fractions)))(input)?;
-    println!("factor done");
+    // println!("factor done");
     Ok((input, map_ops(base, exprs)))
 }
 
 fn parse_component(input: Span) -> ParseResult {
-    println!("insides -> alt: {:?}", input.fragment());
+    // println!("insides -> alt: {:?}", input.fragment());
     let (input, _) = trim(space0)(input)?;
     alt((parse_parens, parse_implicit_multiply, parse_func_call, parse_latex, parse_number, parse_var_use))(input)
 }
@@ -100,14 +100,14 @@ fn parse_implicit_multiply(input: Span) -> ParseResult {
         parse_number, 
         alt((parse_parens, parse_var_use, parse_func_call, parse_latex))
     )(input)?;
-    println!("found implicit multiply");
+    // println!("found implicit multiply");
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
 
 fn parse_func_call(input: Span) -> ParseResult {
     let (input, name) = start_alpha(input)?;
     let (input, params) = parse_call_params(input)?;
-    println!("found func call");
+    // println!("found func call");
     Ok((input, EFunc(name.to_string(), params)))
 }
 
@@ -124,24 +124,24 @@ fn parse_call_params(input: Span) -> ParseResultVec {
 }
 
 fn parse_latex(input: Span) -> ParseResult {
-    println!("testing for latex: {:?}", input.fragment());
+    // println!("testing for latex: {:?}", input.fragment());
     let (rest, _) = char('\\')(input)?;
     if tag("\\cdot")(input).is_ok() {
         return Err(nom::Err::Error(ParseError::new("Found ignored latex, skipping", input)))
     } 
-    println!("found latex");
+    // println!("found latex");
     let (rest, name) = mcut(start_alpha, "Latex command must be followed by a name")(rest)?;
     let mut latex_expr = LatexExpr::new(name.to_string());
     let mut remaining_input = rest;
     let mut found_params = false;
 
-    println!("latex -> super: {:?}", remaining_input.fragment());
+    // println!("latex -> super: {:?}", remaining_input.fragment());
     let superscript = parse_latex_param(remaining_input, '^', false);
     if superscript.is_ok() {
         (remaining_input, latex_expr.superscript) = superscript.unwrap();
         found_params = true;
     }
-    println!("latex -> sub: {:?}", remaining_input.fragment());
+    // println!("latex -> sub: {:?}", remaining_input.fragment());
     let subscript = parse_latex_param(remaining_input, '_', true);
     if subscript.is_ok() {
         (remaining_input, latex_expr.subscript) = subscript.unwrap();
@@ -150,7 +150,7 @@ fn parse_latex(input: Span) -> ParseResult {
     let mut params = unwrap("{", "}")(remaining_input);
     while params.is_ok() {
         let (rest, inside) = params.unwrap();
-        println!("latex param -> component: {:?}", inside.fragment());
+        // println!("latex param -> component: {:?}", inside.fragment());
         let (_, expr) = prepend_cut(parse_math_expr, "In latex param")(inside)?;
         latex_expr.params.push(expr);
         params = unwrap("{", "}")(rest);
