@@ -88,26 +88,28 @@
 
 <style>
     .input-row {
-        --icon-width: 30px;
+        --icon-dim: 30px;
+        --border-radius: 8px;
         display: flex;
         flex-direction: row;
         justify-content: space-between;
         align-items: center;
         width: 100%;
-        padding-left: var(--icon-width);
+        padding-left: var(--icon-dim);
     }
     .input-box {
         border: 1px solid black;
+        min-height: var(--icon-dim);
         padding: .2rem;
     	font-size: 1.2em;
     }
     .rounded-top {
-        border-top-left-radius: 4px;
-        border-top-right-radius: 4px;
+        border-top-left-radius: var(--border-radius);
+        border-top-right-radius: var(--border-radius);
     }
     .rounded-bottom {
-        border-bottom-left-radius: 4px;
-        border-bottom-right-radius: 4px;
+        border-bottom-left-radius: var(--border-radius);
+        border-bottom-right-radius: var(--border-radius);
     }
 
     .no-bottom-border {
@@ -118,17 +120,18 @@
         background: none;
         border: none;
         padding: 0;
-        height: fit-content;
+        height: var(--icon-dim);
     }
 
     .icon {
-        width: var(--icon-width);
+        width: var(--icon-dim);
         padding: 0;
         cursor: pointer;
     }
 
     .error-container {
         position: relative;
+        height: var(--icon-dim);
     }
 
     .hide {
