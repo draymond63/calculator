@@ -1,4 +1,5 @@
-use crate::types::{Span, ParseError, ParseResultStr};
+use crate::types::{Span, ParseResultStr};
+use crate::error::ParseError;
 
 
 use nom::character::complete::{alphanumeric1, space0};
@@ -16,30 +17,32 @@ pub fn start_alpha(input: Span) -> ParseResultStr {
     }
 }
 
-pub fn mcut<'a, I, O, F>(mut parser: F, message: &'a str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError<'a>>
+pub fn mcut<I, O, F>(mut parser: F, message: &str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError>
 where
-  F: nom::Parser<I, O, ParseError<'a>>,
+  F: nom::Parser<I, O, ParseError>,
 {
-  move |input: I| match parser.parse(input) {
-    Err(nom::Err::Error(mut e)) => {
-        e.update_message(message);
-        Err(nom::Err::Failure(e))
-    },
-    rest => rest,
-  }
+    let message = message.to_string();
+    move |input: I| match parser.parse(input) {
+        Err(nom::Err::Error(mut e)) => {
+            e.update_message(message.clone());
+            Err(nom::Err::Failure(e))
+        },
+        rest => rest,
+    }
 }
 
-pub fn prepend_cut<'a, I, O, F>(mut parser: F, message: &'a str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError<'a>>
+pub fn prepend_cut<I, O, F>(mut parser: F, message: &str) -> impl FnMut(I) -> nom::IResult<I, O, ParseError>
 where
-  F: nom::Parser<I, O, ParseError<'a>>,
+  F: nom::Parser<I, O, ParseError>,
 {
-  move |input: I| match parser.parse(input) {
-    Err(nom::Err::Error(mut e)) => {
-        e.prepend_message(message);
-        Err(nom::Err::Error(e))
-    },
-    rest => rest,
-  }
+    let message = message.to_string();
+    move |input: I| match parser.parse(input) {
+        Err(nom::Err::Error(mut e)) => {
+            e.prepend_message(message.clone());
+            Err(nom::Err::Error(e))
+        },
+        rest => rest,
+    }
 }
 
 

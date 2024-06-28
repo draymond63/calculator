@@ -4,6 +4,7 @@
 use crate::{
   evaluator::eval_mut_context,
   types::{Context, Span},
+  error::Error,
   parser::parse,
   units::UnitVal,
 };
@@ -18,22 +19,19 @@ mod parser;
 mod parsing_helpers;
 mod types;
 mod units;
+mod error;
 
 
-type EvalResult = Result<Option<UnitVal>, String>;
+type EvalResult = Result<Option<UnitVal>, Error>;
 
 
 fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> EvalResult {
-    let parse_res = parse(line);
-    if let Ok((_, expr)) = parse_res {
-        println!("Parsed: {:?}", expr);
-        let eval = eval_mut_context(&expr, context);
-        let res = eval?;
-        println!("{} = {:?}", line.fragment(), res);
-        Ok(res)
-    } else {
-        Err(format!("Failed to parse: {:?}", parse_res.unwrap_err()).into())
-    }
+    let expr = parse(line)?;
+    println!("Parsed: {:?}", expr);
+    let eval = eval_mut_context(&expr, context);
+    let res = eval?;
+    println!("{} = {:?}", line.fragment(), res);
+    Ok(res)
 }
 
 fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {

@@ -1,32 +1,33 @@
 use crate::types::{Context, Expr::{self, *}, LatexExpr};
 use crate::units::UnitVal;
+use crate::error::Error;
 
 use itertools::Itertools;
 
 
-pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<UnitVal>, String> {
+pub(crate) fn eval_mut_context(expr: &Expr, mut context: &mut Context) -> Result<Option<UnitVal>, Error> {
     eval_mut_context_def(expr, &mut context, None)
 }
 
-fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, String> {
+fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&str>) -> Result<Option<UnitVal>, Error> {
     match expr {
         EDefVar(var, expr) => {
             let result = eval_expr(expr, &context, Some(&var))?;
             if defining.is_some() {
-                return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", var, defining.unwrap()));
+                return Err(Error::EvalError(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", var, defining.unwrap())));
             }
             if context.vars.contains_key(var) {
-                return Err(format!("Variable '{var}' already defined"));
+                return Err(Error::EvalError(format!("Variable '{var}' already defined")));
             }
             context.vars.insert(var.clone(), result.clone());
             Ok(Some(result))
         },
         EDefFunc(name, params, expr) => {
             if defining.is_some() {
-                return Err(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", name, defining.unwrap()));
+                return Err(Error::EvalError(format!("Cannot contain nested variable definitions (variable '{}' & '{}')", name, defining.unwrap())));
             }
             if context.funcs.contains_key(name) {
-                return Err(format!("Variable '{name}' already defined"));
+                return Err(Error::EvalError(format!("Variable '{name}' already defined")));
             }
             context.funcs.insert(name.clone(), (params.clone(), *expr.clone()));
             Ok(None)
@@ -35,13 +36,13 @@ fn eval_mut_context_def(expr: &Expr, context: &mut Context, defining: Option<&st
     }
 }
 
-fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<UnitVal, String>
+fn compose_expr<F>(expr1: &Expr, expr2: &Expr, func: F, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error>
     where F: Fn(UnitVal, UnitVal) -> UnitVal
 {
     Ok(func(eval_expr(expr1, context, defining)?, eval_expr(expr2, context, defining)?))
 }
 
-fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
+fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
@@ -57,11 +58,11 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
         },
         EVar(var) => {
             if defining.is_some() && var == defining.unwrap() {
-                return Err(format!("Variable '{var}' cannot be defined recursively"))
+                return Err(Error::EvalError(format!("Variable '{var}' cannot be defined recursively")))
             } else if let Some(val) = context.vars.get(var) {
                 Ok(val.clone())
             } else {
-                Err(format!("Variable '{var}' not defined"))
+                Err(Error::EvalError(format!("Variable '{var}' not defined")))
             }
         },
         EFunc(name, inputs) => {
@@ -69,10 +70,10 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
             if applied_defaulted_func.is_ok() {
                 applied_defaulted_func
             } else if defining.is_some() && name == defining.unwrap() {
-                Err(format!("Function '{name}' cannot be defined recursively"))
+                Err(Error::EvalError(format!("Function '{name}' cannot be defined recursively")))
             } else if let Some((params, func_def)) = context.funcs.get(name) {
                 if params.len() != inputs.len() {
-                    return Err(format!("Function '{}' expects {} arguments, but got {}", name, params.len(), inputs.len()));
+                    return Err(Error::EvalError(format!("Function '{}' expects {} arguments, but got {}", name, params.len(), inputs.len())));
                 }
                 let mut eval_context = context.clone();
 
@@ -81,17 +82,17 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> Result<U
                 }
                 eval_expr(func_def, &eval_context, defining)
             } else {
-                Err(format!("Function '{name}' not defined"))
+                Err(Error::EvalError(format!("Function '{name}' not defined")))
             }
         },
         ETex(expr) => eval_latex(expr, &context, defining),
-        _ => Err(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_mut_context_def`?")),
+        _ => Err(Error::EvalError(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_mut_context_def`?")),)
     }
 }
 
-fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
+fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
     if inputs.len() > 1 {
-        return Err("Default functions only accept one argument".to_string());
+        return Err(Error::EvalError("Default functions only accept one argument".to_string()));
     }
     let input = eval_expr(inputs.get(0).unwrap(), context, defining)?;
     let callable = match name.as_str() {
@@ -103,11 +104,11 @@ fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, 
     if let Some(callable) = callable {
         Ok(UnitVal::scalar(callable(input.as_scalar()?)))
     } else {
-        Err(format!("Function '{name}' not defined"))
+        Err(Error::EvalError(format!("Function '{name}' not defined")))
     }
 }
 
-fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<UnitVal, String> {
+fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Result<UnitVal, Error> {
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
@@ -115,27 +116,27 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
     match expr.name.as_str() {
         "frac" => {
             if expr.params.len() != 2 {
-                return Err("frac expects 2 arguments".to_string());
+                return Err(Error::EvalError("frac expects 2 arguments".to_string()));
             }
             if expr.subscript.is_some() || expr.superscript.is_some() {
-                return Err("frac does not support subscripts or superscripts".to_string());
+                return Err(Error::EvalError("frac does not support subscripts or superscripts".to_string()));
             }
             let (num, denom) = expr.params.clone().into_iter().collect_tuple().unwrap();
             compose(&num, &denom, |a, b| a / b)
         },
         "sqrt" => {
             if expr.params.len() != 1 {
-                return Err("Square root expects 1 argument".to_string());
+                return Err(Error::EvalError("Square root expects 1 argument".to_string()));
             }
             if expr.subscript.is_some() || expr.superscript.is_some() {
-                return Err("Square root does not support subscripts or superscripts".to_string());
+                return Err(Error::EvalError("Square root does not support subscripts or superscripts".to_string()));
             }
             let val = expr.params.get(0).unwrap();
             Ok(eval_expr(val, context, defining)?.sqrt()?)
         },
         "sum" => {
             if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
-                return Err(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr));
+                return Err(Error::EvalError(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr)));
             }
             let param = expr.params.get(0).unwrap();
             let superscript = expr.superscript.as_ref().unwrap();
@@ -151,7 +152,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
 
             // Ensure up and ub are integers
             if up.fract()? != 0.0 || ub.fract()? != 0.0 {
-                return Err("Summation bounds must be integers".to_string());
+                return Err(Error::EvalError("Summation bounds must be integers".to_string()));
             }
             let up = up.as_scalar()? as i32 + 1;
             let ub = ub.as_scalar()? as i32;
@@ -165,7 +166,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> Re
             }
             Ok(UnitVal::scalar(sum))
         },
-        unknown_name => Err(format!("Unrecognized latex expression '{unknown_name}'"))
+        unknown_name => Err(Error::EvalError(format!("Unrecognized latex expression '{unknown_name}'")))
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::types::{*, Expr::*};
+use crate::error::{Error, ParseError};
 use crate::parsing_helpers::*;
 use crate::units::UnitVal;
 
@@ -13,12 +14,20 @@ use std::str::FromStr;
 
 
 
-pub(crate) fn parse(input: Span) -> ParseResult {
-    let (input, expr) = parse_math_expr_or_def(input)?;
-    if !input.is_empty() {
-        return Err(nom::Err::Failure(ParseError::new("Terminated parsing early", input)));
+pub(crate) fn parse(input: Span) -> Result<Expr, Error> {
+    let result = parse_math_expr_or_def(input);
+    match result {
+        Ok((input, expr)) => {
+            if input.is_empty() {
+                Ok(expr)
+            } else {
+                Err(Error::ParseError { source: ParseError::new("Input not fully parsed", input) })
+            }
+        }
+        Err(nom::Err::Error(e)) => return Err(Error::ParseError { source: e }),
+        Err(nom::Err::Failure(e)) => return Err(Error::ParseError { source: e }),
+        _ => Err(Error::ParseError { source: ParseError::new("Unknown error", input) })
     }
-    Ok(("".into(), expr))
 }
 
 fn parse_math_expr_or_def(input: Span) -> ParseResult {
@@ -241,21 +250,21 @@ mod tests {
 
     #[test]
     fn parse_add_statement() {
-        let (_, parsed) = parse("12 + 34".into()).unwrap();
+        let parsed = parse("12 + 34".into()).unwrap();
         let expected = EAdd(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_subtract_statement() {
-        let (_, parsed) = parse("12 - 34".into()).unwrap();
+        let parsed = parse("12 - 34".into()).unwrap();
         let expected = ESub(boxed_num(12.0), boxed_num(34.0));
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn parse_nested_add_sub_statements() {
-        let (_, parsed) = parse("12 - 34 + 15 - 9".into()).unwrap();
+        let parsed = parse("12 - 34 + 15 - 9".into()).unwrap();
         let expected = ESub(
             Box::new(EAdd(
                 Box::new(ESub(boxed_num(12.0), boxed_num(34.0))),
@@ -268,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_parse_multi_level_expression() {
-        let (_, parsed) = parse("1 * 2 + 3 / 4 ^ 6".into()).unwrap();
+        let parsed = parse("1 * 2 + 3 / 4 ^ 6".into()).unwrap();
         let expected = EAdd(
             Box::new(EMul(boxed_num(1.0), boxed_num(2.0))),
             Box::new(EDiv(
@@ -281,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_parse_expression_with_parantheses() {
-        let (_, parsed) = parse("(1 + 2) * 3".into()).unwrap();
+        let parsed = parse("(1 + 2) * 3".into()).unwrap();
         let expected = EMul(
             Box::new(EAdd(boxed_num(1.0), boxed_num(2.0))),
             boxed_num(3.0),
@@ -291,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_variable_definition() {
-        let (_, parsed) = parse("a = 2".into()).unwrap();
+        let parsed = parse("a = 2".into()).unwrap();
         let expected = EDefVar(
             "a".to_string(),
             boxed_num(2.0),
@@ -301,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_function_definition() {
-        let (_, parsed) = parse("f(x, y) = x + y".into()).unwrap();
+        let parsed = parse("f(x, y) = x + y".into()).unwrap();
         let expected = EDefFunc(
             "f".to_string(),
             vec!["x".to_string(), "y".to_string()],
@@ -312,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let (_, parsed) = parse("f(1,a)".into()).unwrap();
+        let parsed = parse("f(1,a)".into()).unwrap();
         let expected = EFunc(
             "f".to_string(),
             vec![num(1.0), EVar("a".to_string())],
@@ -322,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_latex() {
-        let (_, parsed) = parse("\\frac{1}{2}".into()).unwrap();
+        let parsed = parse("\\frac{1}{2}".into()).unwrap();
         let expected = ETex(
             LatexExpr {
                 name: "frac".to_string(),
@@ -333,7 +342,7 @@ mod tests {
         );
         assert_eq!(parsed, expected);
 
-        let (_, parsed) = parse("\\sum^{3}_{i=1}{i}".into()).unwrap();
+        let parsed = parse("\\sum^{3}_{i=1}{i}".into()).unwrap();
         let expected = ETex(
             LatexExpr {
                 name: "sum".to_string(),
@@ -344,13 +353,13 @@ mod tests {
         );
         assert_eq!(parsed, expected);
         // TODO: Allow superscript and subscript to be any order
-        // let (_, parsed) = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
+        // let parsed = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
         // assert_eq!(parsed, expected);
     }
 
     #[test]
     fn test_units() {
-        let (_, parsed) = parse("1 km + 1 m".into()).unwrap();
+        let parsed = parse("1 km + 1 m".into()).unwrap();
         let expected = EAdd(
             Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("km"))))),
             Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("m"))))),
@@ -360,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_full() {
-        let (_, parsed) = parse("f(x, y) = x + \\sum^{3}_{i=1}{i*y}".into()).unwrap();
+        let parsed = parse("f(x, y) = x + \\sum^{3}_{i=1}{i*y}".into()).unwrap();
         let expected = EDefFunc(
             "f".to_string(),
             vec!["x".to_string(), "y".to_string()],

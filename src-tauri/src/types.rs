@@ -3,6 +3,7 @@ use nom;
 use nom_locate::LocatedSpan;
 
 use crate::units::UnitVal;
+use crate::error::ParseError;
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -56,53 +57,7 @@ impl Context {
 
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-pub type BaseParseResult<'a, T> = nom::IResult<Span<'a>, T, ParseError<'a>>;
+pub type BaseParseResult<'a, T> = nom::IResult<Span<'a>, T, ParseError>;
 pub type ParseResult<'a> = BaseParseResult<'a, Expr>;
 pub type ParseResultStr<'a> = BaseParseResult<'a, Span<'a>>;
 pub type ParseResultVec<'a> = BaseParseResult<'a, Vec<Expr>>;
-
-
-
-#[derive(Debug, PartialEq)]
-pub struct ParseError<'a> {
-    span: Span<'a>,
-    message: String,
-}
-
-impl<'a> ParseError<'a> {
-    pub fn new(message: &str, span: Span<'a>) -> Self {
-        Self { span, message: message.to_string() }
-    }
-
-    pub fn update_message(&mut self, message: &str) {
-        self.message = message.to_string();
-    }
-
-    pub fn prepend_message(&mut self, message: &str) {
-        self.message = format!("{}: {}", message, self.message);
-    }
-    // pub fn span(&self) -> &Span { &self.span }
-    // pub fn line(&self) -> u32 { self.span().location_line() }
-    // pub fn offset(&self) -> usize { self.span().location_offset() }
-}
-
-// That's what makes it nom-compatible.
-impl<'a> nom::error::ParseError<Span<'a>> for ParseError<'a> {
-    fn from_error_kind(input: Span<'a>, kind: nom::error::ErrorKind) -> Self {
-        Self::new(&format!("parse error {:?}", kind), input)
-    }
-
-    fn append(_input: Span<'a>, _kind: nom::error::ErrorKind, other: Self) -> Self {
-        other
-    }
-
-    fn from_char(input: Span<'a>, c: char) -> Self {
-        Self::new(&format!("unexpected character '{}'", c), input)
-    }
-}
-
-impl<'a> nom::error::ContextError<Span<'a>> for ParseError<'a> {
-    fn add_context(input: Span<'a>, ctx: &'static str, other: Self) -> Self {
-        Self::new(&format!("{}: {}", ctx, other.message), input)
-    }
-}

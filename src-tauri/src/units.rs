@@ -1,3 +1,5 @@
+use crate::error::Error;
+
 use bimap::BiMap;
 use itertools::Itertools;
 use std::{collections::HashMap, sync::OnceLock, vec};
@@ -85,7 +87,7 @@ impl UnitVal {
         self.quantity == UnitVal::unitless()
     }
 
-    fn from_unit(unit: &str) -> Result<(i32, Quantity), String> {
+    fn from_unit(unit: &str) -> Result<(i32, Quantity), Error> {
         if unit.is_empty() {
             return Ok((0, UnitVal::unitless()));
         }
@@ -97,14 +99,14 @@ impl UnitVal {
             let quantity = unit_map().get_by_left(base_unit);
             match (exp, quantity) {
                 (Some(e), Some(q)) => Ok((e.clone(), q.clone())),
-                (None, _) => Err(format!("Invalid unit prefix '{prefix}'")),
-                (_, None) => Err(format!("Invalid base unit '{base_unit}'"))
+                (None, _) => Err(Error::UnitError(format!("Invalid unit prefix '{prefix}'"))),
+                (_, None) => Err(Error::UnitError(format!("Invalid base unit '{base_unit}'")))
             }
         } else {
             let quantity = unit_map().get_by_left(unit);
             match quantity {
                 Some(q) => Ok((0, q.clone())),
-                None => Err(format!("Invalid base unit '{unit}'"))
+                None => Err(Error::UnitError(format!("Invalid base unit '{unit}'")))
             }
         }
     }
@@ -128,25 +130,25 @@ impl std::fmt::Display for UnitVal {
 }
 
 impl UnitVal {
-    pub fn as_scalar(&self) -> Result<f32, String> {
+    pub fn as_scalar(&self) -> Result<f32, Error> {
         if self.quantity != UnitVal::unitless() {
-            Err(format!("Cannot convert unit to scalar: {}", self))
+            Err(Error::UnitError(format!("Cannot convert unit to scalar: {}", self)))
         } else {
             Ok(self.value)
         }
     }
 
-    pub fn powf(&self, exp: UnitVal) -> Result<Self, String> {
+    pub fn powf(&self, exp: UnitVal) -> Result<Self, Error> {
         let value = self.as_scalar()?.powf(exp.as_scalar()?);
         Ok(UnitVal::new(value, UnitVal::unitless()))
     }
 
-    pub fn sqrt(&self) -> Result<Self, String> {
+    pub fn sqrt(&self) -> Result<Self, Error> {
         let value = self.as_scalar()?.sqrt();
         Ok(UnitVal::new(value, UnitVal::unitless()))
     }
 
-    pub fn fract(&self) -> Result<f32, String> {
+    pub fn fract(&self) -> Result<f32, Error> {
         let value = 1.0 / self.as_scalar()?;
         Ok(value)
     }
