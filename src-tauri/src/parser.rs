@@ -21,12 +21,12 @@ pub(crate) fn parse(input: Span) -> CResult<Expr> {
             if input.is_empty() {
                 Ok(expr)
             } else {
-                Err(Error::ParseError { source: ParseError::new("Input not fully parsed", input) })
+                Err(Error::ParseError(ParseError::new("Input not fully parsed", input)))
             }
         }
-        Err(nom::Err::Error(e)) => return Err(Error::ParseError { source: e }),
-        Err(nom::Err::Failure(e)) => return Err(Error::ParseError { source: e }),
-        _ => Err(Error::ParseError { source: ParseError::new("Unknown error", input) })
+        Err(nom::Err::Error(e)) => return Err(Error::ParseError(e)),
+        Err(nom::Err::Failure(e)) => return Err(Error::ParseError(e)),
+        _ => Err(Error::ParseError(ParseError::new("Unknown error", input)))
     }
 }
 

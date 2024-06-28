@@ -6,11 +6,8 @@ use nom;
 
 #[derive(Error, Debug, Serialize)]
 pub enum Error {
-    #[error("unable to parse input: {}", .source.span.fragment)]
-    ParseError{
-        #[from]
-        source: ParseError
-    },
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
     #[error("evaluation error: {0}")]
     EvalError(String),
     #[error("unit error: {0}")]
