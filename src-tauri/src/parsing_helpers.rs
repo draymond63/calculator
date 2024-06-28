@@ -4,6 +4,7 @@ use crate::error::ParseError;
 
 use nom::character::complete::{alphanumeric1, space0};
 use nom::bytes::complete::take_until;
+use nom::branch::alt;
 
 
 
@@ -51,9 +52,9 @@ where
     F: Fn(Span<'a>) -> ParseResultStr<'a> + 'a,
 {
     move |input| {
-        let (input, _) = space0(input)?;
+        let (input, _) = alt((tag("\\ "), space0))(input)?;
         let (input, res) = f(input)?;
-        let (input, _) = space0(input)?;
+        let (input, _) = alt((tag("\\ "), space0))(input)?;
         Ok((input, res))
     }
 }
