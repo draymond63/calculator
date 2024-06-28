@@ -37,6 +37,7 @@
             {index}
             bind:latex="{latex}"
             result={results[index]}
+            is_last={index == latexes.length - 1}
             on:enter={addRow}
             on:focusUp={() => focusRow(index - 1)}
             on:focusDown={() => focusRow(index + 1)}

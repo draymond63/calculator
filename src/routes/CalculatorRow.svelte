@@ -9,11 +9,13 @@
     export let latex = '';
     export let index = 0;
     export let result = '';
+    export let is_last = false;
 	const fire = createEventDispatcher();
     
     let parsed_result = {Ok: '', Err: ''};
     let show_error = false;
     let show_copy = false;
+    let is_first = index == 0;
 
     $: result, parseResult(result);
 
@@ -49,7 +51,13 @@
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="input-row" on:mouseenter={() => show_copy = true} on:mouseleave={() => show_copy = false}>
-    <div class="input-row input-box" id={`input-${index}`}>
+    <div
+        class="input-row input-box"
+        class:no-bottom-border={!is_last}
+        class:rounded-top={is_first}
+        class:rounded-bottom={is_last}
+        id={`input-${index}`}
+    >
         <MathQuill
             bind:latex="{latex}"
             config={({ autoCommands, autoOperatorNames })}
@@ -90,9 +98,20 @@
     }
     .input-box {
         border: 1px solid black;
-        box-sizing: content-box;
         padding: .2rem;
     	font-size: 1.2em;
+    }
+    .rounded-top {
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+    }
+    .rounded-bottom {
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
+    }
+
+    .no-bottom-border {
+        border-bottom: none;
     }
 
     .icon-button {
