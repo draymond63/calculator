@@ -34,14 +34,17 @@ fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> 
 }
 
 fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
-    let inputs = inputs.into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>();
     let mut context = Context::new();
     let mut results = vec![];
 
-    for (i, input) in inputs.into_iter().enumerate() {        
-        let line_num: u32 = (i + 1) as u32;
-        let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
-        results.push(evaluate_line(line, &mut context));
+    for (i, input) in inputs.into_iter().enumerate() {      
+        if input.is_empty() {
+            results.push(Ok(None));
+        } else {
+            let line_num: u32 = (i + 1) as u32;
+            let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
+            results.push(evaluate_line(line, &mut context));
+        }
     }
     results
 }

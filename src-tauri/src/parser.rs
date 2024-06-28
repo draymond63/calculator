@@ -21,7 +21,7 @@ pub(crate) fn parse(input: Span) -> CResult<Expr> {
             if input.is_empty() {
                 Ok(expr)
             } else {
-                Err(Error::ParseError(ParseError::new("Input not fully parsed", input)))
+                Err(Error::ParseError(ParseError::new("Failed to parse", input)))
             }
         }
         Err(nom::Err::Error(e)) => return Err(Error::ParseError(e)),
