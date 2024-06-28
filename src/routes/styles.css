@@ -14,6 +14,12 @@
 	--column-margin-top: 4rem;
 	font-family: var(--font-body);
 	color: var(--color-text);
+
+	--toastContainerTop: auto;
+	--toastContainerRight: auto;
+	--toastContainerBottom: 1rem;
+	--toastContainerLeft: calc(50vw - 8rem);
+	--toastBarHeight: 0;
 }
 
 body {

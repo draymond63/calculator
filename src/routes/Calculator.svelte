@@ -44,13 +44,12 @@
         />
     {/each}
     <button on:click={addRow}>Add</button>
-	<br />
 </section>
 
 <style>
 	section {
         width: 100%;
-        max-width: 400px;
+        max-width: 500px;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;

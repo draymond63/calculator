@@ -4,7 +4,7 @@
 </script>
 
 <section>
-  	<h1>Welcome to<br />Dansmos</h1>
+  	<h1>Dansmos</h1>
 	<Calculator />
 	<br />
 	<!-- <Graph equation="{latex}" /> -->
