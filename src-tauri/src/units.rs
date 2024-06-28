@@ -144,8 +144,22 @@ impl UnitVal {
     }
 
     pub fn powf(&self, exp: UnitVal) -> Result<Self, Error> {
-        let value = self.as_scalar()?.powf(exp.as_scalar()?);
-        Ok(UnitVal::new(value, UnitVal::unitless()))
+        let exp: f32 = exp.as_scalar()?;
+        if exp.fract() == 0.0 {
+            let exp = exp as i32;
+            Ok(self.powi(exp))
+        } else {
+            let value = self.as_scalar()?.powf(exp);
+            Ok(UnitVal::new(value, UnitVal::unitless()))
+        }
+    }
+
+    fn powi(&self, exp: i32) -> Self {
+        let a = &self.quantity;
+        UnitVal {
+            value: self.value.powi(exp),
+            quantity: (0..a.len()).map(|i| a[i] * exp).collect()
+        }
     }
 
     pub fn sqrt(&self) -> Result<Self, Error> {
