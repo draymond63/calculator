@@ -57,17 +57,18 @@ impl UnitVal {
             return format!("{} {}", self.value, base_unit.name)
         }
 
-        let val_exp = val.log10().floor() as i32;
-        if val_exp == 0 {
-            format!("{} {}", val, base_unit.name)
-        } else if let Some((_, numerator_unit_exp)) = numerator_units.get(0) {
-            let val = val / 10.0_f32.powf(val_exp as f32);
+        if let Some((_, numerator_unit_exp)) = numerator_units.get(0) {
+            let val_exp = val.log10().floor() as i32;
+            let reduced_val = val / 10.0_f32.powf(val_exp as f32);
             // Account for the exponent of the unit it's being applied to
             let val_exp = val_exp / *numerator_unit_exp;
             // Reduce the exponent to the nearest multiple of 3
             let val_exp = val_exp / 3 * 3;
-            let prefix = prefix_map().get_by_right(&val_exp).expect("Invalid unit prefix");
-            format!("{} {}{}", val, prefix, base_unit.name)
+            if let Some(prefix) = prefix_map().get_by_right(&val_exp) {
+                format!("{} {}{}", reduced_val, prefix, base_unit.name)
+            } else {
+                format!("{} {}", val, base_unit.name)
+            }
         } else {
             // TODO: Allow prefixes when there is a single denominator units
             format!("{} {}", val, base_unit.name)
@@ -410,6 +411,9 @@ fn unit_map() -> &'static HashMap<&'static str, Unit> {
 }
 
 /// Used to determine which units are shown in the UI
+/// 
+/// TODO: Use systems on the frontend. Have the background return all possible units and the frontend filters them.
+/// TODO: User should be able to specify a custom system (on frontend)
 fn unit_system() -> &'static HashMap<&'static str, Vec<&'static str>> {
     static HASHMAP: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
     HASHMAP.get_or_init(|| {
@@ -439,6 +443,8 @@ mod tests {
         assert!(UnitVal::is_valid_unit("km"));
         assert!(UnitVal::is_valid_unit("mm"));
         assert!(UnitVal::is_valid_unit("mA"));
+        assert!(UnitVal::is_valid_unit("ft"));
+        assert!(UnitVal::is_valid_unit("lb"));
     }
 
     #[test]
