@@ -228,7 +228,7 @@ impl Unit {
     }
 
     pub fn from_quantity(quantity: &Quantity) -> CResult<Self> {
-        let used_units = Unit::compile_used_units(quantity)?;
+        let used_units = Unit::compile_used_units(quantity, "SI")?;
         let unit_vec = used_units.iter().map(|(name, exp)| (unit_map().get(name).unwrap(), *exp)).collect_vec();
         let si_scale  = unit_vec.iter().fold(1.0, |acc, (unit, exp)| acc * (unit.si_scale.powi(*exp)));
         let name = Unit::get_unit_str(used_units);
@@ -254,8 +254,9 @@ impl Unit {
     }
 
     /// Returns a map of string units and their exponents that summarize the given quantity
-    fn compile_used_units(quantity: &Quantity) -> CResult<HashMap<&str, i32>> {
+    fn compile_used_units(quantity: &Quantity, system: &str) -> CResult<HashMap<&'static str, i32>> {
         let max_iter = 5;
+        let system = &unit_system()[system];
         let mut avail_units = unit_map().clone();
         let mut used_units = HashMap::new();
         let mut iterations = 0;
@@ -267,12 +268,12 @@ impl Unit {
             let mut remaining_quantity = current_quantity.clone();
             let mut exp = 0;
             for (name, unit) in avail_units.clone().iter() {
-                if unit.is_subset_of_quantity(&current_quantity) {
-                    let match_score = unit.count_quantity_match(&current_quantity);
+                if system.contains(name) && unit.is_subset_of_quantity(&current_quantity) {
+                    let match_score = unit.quantity.iter().map(|x| x.abs()).sum();
                     if match_score > best_match {
                         best_unit = name;
                         best_match = match_score;
-                        exp = unit.find_best_exp(&current_quantity);
+                        exp = unit.find_best_exp(&current_quantity).expect("Exponent not found");
                         remaining_quantity = unit.zip_quantity(&current_quantity).map(|(a, b)| b - a * exp).collect();
                     }
                 } else {
@@ -296,14 +297,21 @@ impl Unit {
     }
 
     fn is_subset_of_quantity(&self, q2: &Quantity) -> bool {
-        self.zip_quantity(q2).all(|(a, b)| (*b != 0) || (*a == 0))
+        let sign = match self.find_best_exp(q2) {
+            Some(e) => e.signum(),
+            None => return false
+        };
+        self.zip_quantity(q2).all(|(sub_unit, set_unit)| {
+            let sub_unit = *sub_unit;
+            let set_unit = *set_unit;
+            // If the signs are consistently the same (or consistently opposite) and the sub_unit is less than the set_unit
+            let consistent_sign = (sub_unit * sign).signum() == set_unit.signum();
+            let not_too_big = sub_unit.abs() <= set_unit.abs();
+            (sub_unit == 0) || (consistent_sign && not_too_big)
+        })
     }
 
-    fn count_quantity_match(&self, q2: &Quantity) -> usize {
-        self.zip_quantity(q2).map(|(a, b)| !(*a == 0)^(*b == 0)).count()
-    }
-
-    fn find_best_exp(&self, q2: &Quantity) -> i32 {
+    fn find_best_exp(&self, q2: &Quantity) -> Option<i32> {
         let mut possible_exps = vec![];
         for (a, b) in self.zip_quantity(q2) {
             if *a != 0 && *b != 0 {
@@ -311,8 +319,7 @@ impl Unit {
                 break;
             }
         }
-        let exp = possible_exps.iter().min().unwrap();
-        *exp
+        possible_exps.iter().min().copied()
     }
 
     fn zip_quantity<'a>(&'a self, q2: &'a Quantity) -> impl Iterator<Item = (&'a i32, &'a i32)> {
@@ -339,7 +346,7 @@ impl Unit {
     pub fn scalar() -> Quantity { vec![0, 0, 0, 0, 0, 0, 0] }
     pub fn length() -> Quantity { vec![1, 0, 0, 0, 0, 0, 0] }
     pub fn time() -> Quantity { vec![0, 1, 0, 0, 0, 0, 0] }
-    // pub fn frequency() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
+    pub fn frequency() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
     pub fn mass() -> Quantity { vec![0, 0, 1, 0, 0, 0, 0] }
     pub fn current() -> Quantity { vec![0, 0, 0, 1, 0, 0, 0] }
     pub fn temp() -> Quantity { vec![0, 0, 0, 0, 1, 0, 0] }
@@ -370,18 +377,29 @@ fn unit_map() -> &'static HashMap<&'static str, Unit> {
         let mut m = HashMap::new();
         // m.insert("C", Unit::new("C", 272.15, 1.0, Unit::temp())); // Celsius
         // m.insert("F", Unit::new("F", 255.3722, 2.2, Unit::temp())); // Fahrenheit
-        // m.insert("Pa", Unit::new("Pa", 1000.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("Pa", Unit::new("Pa", 1000.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
         m.insert("N", Unit::new("N", 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
+        // m.insert("lbf", Unit::new("N", 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
         m.insert("m", Unit::new("m", 1.0, Unit::length())); // Meter
-        // m.insert("ft", Unit::new("ft", 0.3048, Unit::length())); // Meter
-        // m.insert("in", Unit::new("in", 0.0254, Unit::length())); // Meter
+        m.insert("ft", Unit::new("ft", 0.3048, Unit::length())); // Meter
+        m.insert("in", Unit::new("in", 0.0254, Unit::length())); // Meter
         m.insert("s", Unit::new("s", 1.0, Unit::time())); // Second
         m.insert("g", Unit::new("g", 1.0, Unit::mass())); // Gram
-        // m.insert("Hz", Unit::new("Hz", 1.0, Unit::frequency())); // Hertz
+        m.insert("Hz", Unit::new("Hz", 1.0, Unit::frequency())); // Hertz
         m.insert("A", Unit::new("A", 1.0, Unit::current())); // Ampere
         m.insert("K", Unit::new("K", 1.0, Unit::temp())); // Kelvin
         m.insert("mol", Unit::new("mol", 1.0, Unit::amount())); // Mole
         m.insert("cd", Unit::new("cd", 1.0, Unit::lumenous())); // Candela
+        m
+    })
+}
+
+fn unit_system() -> &'static HashMap<&'static str, Vec<&'static str>> {
+    static HASHMAP: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+    HASHMAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert("SI", vec!["m", "s", "N", "g", "A", "K", "mol", "cd", "N", "Pa"]);
+        m.insert("US", vec!["ft", "s", "lb", "A", "K", "mol", "cd", "lbf", "psi"]);
         m
     })
 }
@@ -393,11 +411,16 @@ mod tests {
 
     #[test]
     fn test_valid_unit() {
-        assert!(UnitVal::is_valid_unit("m"));
-        assert!(UnitVal::is_valid_unit("s"));
+        for system in unit_system() {
+            for unit in system.1 {
+                assert!(UnitVal::is_valid_unit(unit));
+            }
+        }
         assert!(UnitVal::is_valid_unit("Hz"));
         assert!(UnitVal::is_valid_unit("km"));
         assert!(UnitVal::is_valid_unit("mm"));
         assert!(UnitVal::is_valid_unit("mA"));
     }
+
+
 }
