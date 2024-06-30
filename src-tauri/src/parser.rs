@@ -96,10 +96,7 @@ fn parse_component(input: Span) -> ParseResult {
 
 fn parse_implicit_multiply(input: Span) -> ParseResult {
     let (input, (num, var)) = 
-    pair(
-        parse_number, 
-        alt((parse_parens, parse_var_use, parse_func_call, parse_latex))
-    )(input)?;
+    pair(parse_number, parse_term_no_fractions)(input)?;
     // println!("found implicit multiply");
     Ok((input, EMul(Box::new(num), Box::new(var))))
 }
