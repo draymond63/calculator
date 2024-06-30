@@ -8,7 +8,7 @@ use nom::character::complete::{char, digit1, space0};
 use nom::bytes::complete::take_until;
 use nom::combinator::map;
 use nom::multi::{many0, separated_list0};
-use nom::sequence::{delimited, tuple, pair};
+use nom::sequence::{delimited, pair, tuple};
 
 use std::str::FromStr;
 
@@ -177,11 +177,24 @@ fn parse_latex_param(input: Span, c: char, allow_def: bool) -> BaseParseResult<O
 }
 
 fn parse_number(input: Span) -> ParseResult {
-    map(trim(digit1), parse_enum)(input)
+    alt((
+        parse_decimal,
+        map(trim(digit1), parse_enum),
+    ))(input)
+}
+
+fn parse_decimal(input: Span) -> ParseResult {
+    let (rest, num) = tuple((digit1, char('.'), digit1))(input)?;
+    let num = format!("{}.{}", num.0, num.2);
+    Ok((rest, into_enum(&num)))
 }
 
 fn parse_enum(parsed_num: Span) -> Expr {
-    let num = f32::from_str(parsed_num.fragment()).unwrap();
+    into_enum(parsed_num.fragment())
+}
+
+fn into_enum(parsed_num: &str) -> Expr {
+    let num = f32::from_str(parsed_num).unwrap();
     ENum(UnitVal::scalar(num))
 }
 
@@ -272,6 +285,13 @@ mod tests {
             )),
             boxed_num(9.0)
         );
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_decimal() {
+        let parsed = parse("1.2".into()).unwrap();
+        let expected = ENum(UnitVal::scalar(1.2));
         assert_eq!(parsed, expected);
     }
 

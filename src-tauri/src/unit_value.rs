@@ -260,7 +260,7 @@ mod tests {
         let tests = vec![
             ("1 N/kg", "1 m/s^2"),
             ("1 kPa/N", "1000 /m^2"),
-            // ("0.01 km^2", "10000 m^2"),
+            ("0.01 km^2", "10000 m^2"),
         ];
         for (input, expected) in tests {
             let input = Span::new(input);
