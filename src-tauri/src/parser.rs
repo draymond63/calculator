@@ -1,7 +1,7 @@
 use crate::types::{CResult, *, Expr::*};
 use crate::error::{Error, ParseError};
 use crate::parsing_helpers::*;
-use crate::units::UnitVal;
+use crate::unit_value::UnitVal;
 
 use nom::branch::alt;
 use nom::character::complete::{char, digit1, space0};
@@ -366,6 +366,12 @@ mod tests {
         let expected = EAdd(
             Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("km"))))),
             Box::new(EMul(boxed_num(1.0), Box::new(ENum(UnitVal::new_identity("m"))))),
+        );
+        assert_eq!(parsed, expected);
+        let parsed = parse("100 m^2".into()).unwrap();
+        let expected = EMul(
+            boxed_num(100.0),
+            Box::new(EExp(Box::new(ENum(UnitVal::new_identity("m"))), boxed_num(2.0)))
         );
         assert_eq!(parsed, expected);
     }

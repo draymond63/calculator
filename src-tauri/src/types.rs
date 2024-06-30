@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use nom;
 use nom_locate::LocatedSpan;
 
-use crate::units::UnitVal;
+use crate::unit_value::UnitVal;
 use crate::error::{Error, ParseError};
 
 

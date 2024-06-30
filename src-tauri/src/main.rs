@@ -5,7 +5,7 @@ use crate::{
   evaluator::eval_mut_context,
   types::{Context, Span, CResult},
   parser::parse,
-  units::UnitVal,
+  unit_value::UnitVal,
 };
 
 use std::env;
@@ -17,6 +17,7 @@ mod evaluator;
 mod parser;
 mod parsing_helpers;
 mod types;
+mod unit_value;
 mod units;
 mod error;
 
