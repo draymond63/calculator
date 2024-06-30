@@ -53,6 +53,7 @@ impl UnitVal {
         if exp == 0 {
             format!("{} {}", val, base_unit.name)
         } else {
+            // TODO: Prefix shouldn't be added blindly to square values
             let prefix = prefix_map().get_by_right(&exp).expect("Invalid unit prefix");
             format!("{} {}{}", val, prefix, base_unit.name)
         }
@@ -92,10 +93,6 @@ impl UnitVal {
                 None => Err(Error::UnitError(format!("Invalid base unit '{unit}'")))
             }
         }
-    }
-
-    fn compose_quantities(q1: &Quantity, q2: &Quantity, func: impl Fn(i32, i32) -> i32) -> Quantity {
-        (0..q1.len()).map(|i| func(q1[i], q2[i])).collect()
     }
 
     pub fn scalar(value: f32) -> UnitVal { UnitVal::new(value, UnitVal::unitless()) }
@@ -221,24 +218,21 @@ impl Serialize for UnitVal {
 #[derive(Debug, Clone, PartialEq)]
 struct Unit {
     pub name: String,
-    pub si_offset: f32, // TODO: Offsets aren't used properly
     pub si_scale: f32,
     pub quantity: Quantity,
 }
 
 impl Unit {
-    pub fn new(name: &str, si_offset: f32, si_scale: f32, quantity: Quantity) -> Self {
-        Unit { name: name.to_string(), si_offset, si_scale, quantity }
+    pub fn new(name: &str, si_scale: f32, quantity: Quantity) -> Self {
+        Unit { name: name.to_string(), si_scale, quantity }
     }
 
     pub fn from_quantity(quantity: &Quantity) -> CResult<Self> {
         let used_units = Unit::compile_used_units(quantity)?;
         let unit_vec = used_units.iter().map(|(name, exp)| (unit_map().get(name).unwrap(), *exp)).collect_vec();
         let si_scale  = unit_vec.iter().fold(1.0, |acc, (unit, exp)| acc * (unit.si_scale.powi(*exp)));
-        // TODO: Is this right?
-        let si_offset = unit_vec.iter().fold(0.0, |acc, (unit, exp)| acc + (unit.si_offset * (*exp as f32)));
         let name = Unit::get_unit_str(used_units);
-        Ok(Unit::new(name.as_str(), si_offset, si_scale, quantity.clone()))
+        Ok(Unit::new(&name, si_scale, quantity.clone()))
     }
 
     fn get_unit_str(units: HashMap<&str, i32>) -> String {
@@ -262,28 +256,30 @@ impl Unit {
     /// Returns a map of string units and their exponents that summarize the given quantity
     fn compile_used_units(quantity: &Quantity) -> CResult<HashMap<&str, i32>> {
         let max_iter = 5;
-        let avail_units = unit_map(); // TODO: (optimization) Make mutable so that repeated iterations are on a subset
+        let mut avail_units = unit_map().clone();
         let mut used_units = HashMap::new();
         let mut iterations = 0;
         let mut current_quantity = quantity.clone();
 
         while Unit::dimensionality(&current_quantity) != 0 && iterations < max_iter {
             let mut best_unit = "";
-            let mut best_cost = Unit::dimensionality(&current_quantity);
+            let mut best_match = 0;
             let mut remaining_quantity = current_quantity.clone();
-            for (name, unit) in avail_units.iter() {
-                // TODO: Can't handle divisions
-                let next_quantity = UnitVal::compose_quantities(&current_quantity, &unit.quantity, |x, y| x - y);
-                let unit_cost = Unit::dimensionality(&next_quantity);
-                // println!("Dropping {name} from {current_quantity:?} results in {next_quantity:?} with cost of {unit_cost}");
-                if unit_cost < best_cost {
-                    best_cost = unit_cost;
-                    best_unit = *name;
-                    remaining_quantity = next_quantity;
+            let mut exp = 0;
+            for (name, unit) in avail_units.clone().iter() {
+                if unit.is_subset_of_quantity(&current_quantity) {
+                    let match_score = unit.count_quantity_match(&current_quantity);
+                    if match_score > best_match {
+                        best_unit = name;
+                        best_match = match_score;
+                        exp = unit.find_best_exp(&current_quantity);
+                        remaining_quantity = unit.zip_quantity(&current_quantity).map(|(a, b)| b - a * exp).collect();
+                    }
+                } else {
+                    avail_units.remove(name); // No need to check it ever again
                 }
             }
-            let current_unit_power = used_units.get(best_unit).unwrap_or(&0);
-            used_units.insert(best_unit, current_unit_power + 1);
+            used_units.insert(best_unit,  exp);
             iterations += 1;
             current_quantity = remaining_quantity;
             // println!("Cost at end of round: {} ({current_quantity:?})", Unit::dimensionality(&current_quantity));
@@ -299,27 +295,51 @@ impl Unit {
         quantity.iter().map(|x| x.abs()).sum()
     }
 
+    fn is_subset_of_quantity(&self, q2: &Quantity) -> bool {
+        self.zip_quantity(q2).all(|(a, b)| (*b != 0) || (*a == 0))
+    }
+
+    fn count_quantity_match(&self, q2: &Quantity) -> usize {
+        self.zip_quantity(q2).map(|(a, b)| !(*a == 0)^(*b == 0)).count()
+    }
+
+    fn find_best_exp(&self, q2: &Quantity) -> i32 {
+        let mut possible_exps = vec![];
+        for (a, b) in self.zip_quantity(q2) {
+            if *a != 0 && *b != 0 {
+                possible_exps.push(b / a);
+                break;
+            }
+        }
+        let exp = possible_exps.iter().min().unwrap();
+        *exp
+    }
+
+    fn zip_quantity<'a>(&'a self, q2: &'a Quantity) -> impl Iterator<Item = (&'a i32, &'a i32)> {
+        self.quantity.iter().zip(q2.iter())
+    }
+
 
     pub fn into_unit_val(&self, value: f32) -> UnitVal {
         UnitVal::new(self.to_si(value), self.quantity.clone())
     }
 
     pub fn to_si(&self, value: f32) -> f32 {
-        (value + self.si_offset) * self.si_scale
+        value * self.si_scale
     }
 
     pub fn from_si(&self, value: f32) -> f32 {
-        (value - self.si_offset) / self.si_scale
+        value / self.si_scale
     }
 
     pub fn unit_scalar() -> Self {
-        Unit::new("", 0.0, 1.0, Unit::scalar())
+        Unit::new("", 1.0, Unit::scalar())
     }
 
     pub fn scalar() -> Quantity { vec![0, 0, 0, 0, 0, 0, 0] }
     pub fn length() -> Quantity { vec![1, 0, 0, 0, 0, 0, 0] }
     pub fn time() -> Quantity { vec![0, 1, 0, 0, 0, 0, 0] }
-    pub fn frequency() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
+    // pub fn frequency() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
     pub fn mass() -> Quantity { vec![0, 0, 1, 0, 0, 0, 0] }
     pub fn current() -> Quantity { vec![0, 0, 0, 1, 0, 0, 0] }
     pub fn temp() -> Quantity { vec![0, 0, 0, 0, 1, 0, 0] }
@@ -350,15 +370,18 @@ fn unit_map() -> &'static HashMap<&'static str, Unit> {
         let mut m = HashMap::new();
         // m.insert("C", Unit::new("C", 272.15, 1.0, Unit::temp())); // Celsius
         // m.insert("F", Unit::new("F", 255.3722, 2.2, Unit::temp())); // Fahrenheit
-        m.insert("N", Unit::new("N", 0.0, 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
-        m.insert("m", Unit::new("m", 0.0, 1.0, Unit::length())); // Meter
-        m.insert("s", Unit::new("s", 0.0, 1.0, Unit::time())); // Second
-        m.insert("g", Unit::new("g", 0.0, 1.0, Unit::mass())); // Gram
-        m.insert("Hz", Unit::new("Hz",  0.0, 1.0, Unit::frequency())); // Hertz
-        m.insert("A", Unit::new("A", 0.0, 1.0, Unit::current())); // Ampere
-        m.insert("K", Unit::new("K", 0.0, 1.0, Unit::temp())); // Kelvin
-        m.insert("mol", Unit::new("mol", 0.0, 1.0, Unit::amount())); // Mole
-        m.insert("cd", Unit::new("cd", 0.0, 1.0, Unit::lumenous())); // Candela
+        // m.insert("Pa", Unit::new("Pa", 1000.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("N", Unit::new("N", 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("m", Unit::new("m", 1.0, Unit::length())); // Meter
+        // m.insert("ft", Unit::new("ft", 0.3048, Unit::length())); // Meter
+        // m.insert("in", Unit::new("in", 0.0254, Unit::length())); // Meter
+        m.insert("s", Unit::new("s", 1.0, Unit::time())); // Second
+        m.insert("g", Unit::new("g", 1.0, Unit::mass())); // Gram
+        // m.insert("Hz", Unit::new("Hz", 1.0, Unit::frequency())); // Hertz
+        m.insert("A", Unit::new("A", 1.0, Unit::current())); // Ampere
+        m.insert("K", Unit::new("K", 1.0, Unit::temp())); // Kelvin
+        m.insert("mol", Unit::new("mol", 1.0, Unit::amount())); // Mole
+        m.insert("cd", Unit::new("cd", 1.0, Unit::lumenous())); // Candela
         m
     })
 }
