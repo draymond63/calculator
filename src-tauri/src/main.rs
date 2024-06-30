@@ -27,10 +27,9 @@ type EvalResult = CResult<Option<UnitVal>>;
 fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> EvalResult {
     let expr = parse(line)?;
     println!("Parsed: {:?}", expr);
-    let eval = eval_mut_context(&expr, context);
-    let res = eval?;
-    println!("{} = {:?}", line.fragment(), res);
-    Ok(res)
+    let eval = eval_mut_context(&expr, context)?;
+    println!("{} = {:?}", line.fragment(), eval);
+    Ok(eval)
 }
 
 fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
@@ -67,8 +66,10 @@ fn main() {
     let inputs = input_file_contents.lines().collect::<Vec<&str>>();
     for (i, result) in evaluate_sequence(inputs.clone()).iter().enumerate() {
       if let Ok(Some(val)) = result {
-        println!("{} = {}", inputs[i], val)
-      } 
+        println!("{} = {}", inputs[i], val);
+      } else if let Err(err) = result {
+        println!("Error: {:?}", err);
+      }
     }
   } else {
     tauri::Builder::default()

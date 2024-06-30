@@ -13,6 +13,7 @@ pub struct UnitVal {
     pub quantity: Quantity,
 }
 
+// TODO: Convert to struct with methods
 type Quantity = vec::Vec<i32>;
 
 
@@ -28,14 +29,14 @@ impl UnitVal {
         if unit.is_empty() {
             return UnitVal::scalar(value);
         }
-        let (exp, base_unit) = UnitVal::from_unit(unit).unwrap();
+        let (exp, base_unit) = UnitVal::from_unit_str(unit).unwrap();
         let scale_factor = 10.0_f32.powf(exp as f32);
         let value = value * scale_factor;
         base_unit.into_unit_val(value)
     }
 
     pub fn is_valid_unit(unit: &str) -> bool {
-        UnitVal::from_unit(unit).is_ok()
+        UnitVal::from_unit_str(unit).is_ok()
     }
 
     pub fn new_identity(unit: &str) -> Self {
@@ -45,38 +46,51 @@ impl UnitVal {
     pub fn to_string(&self) -> String {
         if self.is_scalar() {
             return self.value.to_string()
-        } 
-        let base_unit = self.get_unit().unwrap();
+        }
+        let used_units = Unit::compile_used_units(&self.quantity, "SI").unwrap();
+        let base_unit = Unit::compose(&used_units, &self.quantity);
         let val = base_unit.from_si(self.value);
-        let exp = val.log10().floor() as i32 / 3 * 3;
-        let val = val / 10.0_f32.powf(exp as f32);
-        if exp == 0 {
-            format!("{} {}", val, base_unit.name)
-        } else {
-            // TODO: Prefix shouldn't be added blindly to square values
-            let prefix = prefix_map().get_by_right(&exp).expect("Invalid unit prefix");
-            format!("{} {}{}", val, prefix, base_unit.name)
-        }
-    }
 
-    fn get_unit(&self) -> CResult<Unit> {
-        if self.quantity == UnitVal::unitless() {
-            return Ok(Unit::unit_scalar())
+        let numerator_units: Vec<(&&str, &i32)> = used_units.iter().filter(|(_, exp)| **exp > 0).collect();
+        let has_units_multiplied: bool = numerator_units.len() > 1;
+        if has_units_multiplied || base_unit.name == "kg" { // TODO: Make working with grams more ergonomic
+            return format!("{} {}", self.value, base_unit.name)
         }
-        Unit::from_quantity(&self.quantity)
+
+        let val_exp = val.log10().floor() as i32;
+        if val_exp == 0 {
+            format!("{} {}", val, base_unit.name)
+        } else if let Some((_, numerator_unit_exp)) = numerator_units.get(0) {
+            let val = val / 10.0_f32.powf(val_exp as f32);
+            // Account for the exponent of the unit it's being applied to
+            let val_exp = val_exp / *numerator_unit_exp;
+            // Reduce the exponent to the nearest multiple of 3
+            let val_exp = val_exp / 3 * 3;
+            let prefix = prefix_map().get_by_right(&val_exp).expect("Invalid unit prefix");
+            format!("{} {}{}", val, prefix, base_unit.name)
+        } else {
+            // TODO: Allow prefixes when there is a single denominator units
+            format!("{} {}", val, base_unit.name)
+        }
     }
 
     pub fn is_scalar(&self) -> bool {
         self.quantity == UnitVal::unitless()
     }
 
-    /// Parsing the Unit and exponential from the unit's shortand and it's prefix e.g. "kN" -> (3, NewtonUnit)
-    fn from_unit(unit: &str) -> Result<(i32, Unit), Error> {
+    /// Parsing the Unit and exponential from a base unit's shortand and it's prefix e.g. "kN" -> (3, NewtonUnit).
+    /// 
+    /// Cannot handle composed units like "kg*m/s^2"
+    /// 
+    /// TODO: Doesn't work with mols or psi since they start with prefix letters m & p
+    fn from_unit_str(unit: &str) -> Result<(i32, Unit), Error> {
         if unit.is_empty() {
             return Err(Error::UnitError("No units given. Value is scalar".to_string()));
         }
         let possible_prefix = unit.chars().next().expect("Unit was empty but not caught by is_empty check");
-        if unit.len() > 1 && prefix_map().contains_left(&possible_prefix) {
+        if unit == "kg" {
+            Ok((0, unit_map().get("kg").unwrap().clone()))
+        } else if unit.len() > 1 && prefix_map().contains_left(&possible_prefix) {
             let prefix = possible_prefix;
             let unit_shorthand = &unit[1..];
             let exp = prefix_map().get_by_left(&prefix);
@@ -220,6 +234,7 @@ struct Unit {
     pub name: String,
     pub si_scale: f32,
     pub quantity: Quantity,
+    // TODO: Add optional max and min prefixes (e.g. can't have megametres)
 }
 
 impl Unit {
@@ -227,15 +242,15 @@ impl Unit {
         Unit { name: name.to_string(), si_scale, quantity }
     }
 
-    pub fn from_quantity(quantity: &Quantity) -> CResult<Self> {
-        let used_units = Unit::compile_used_units(quantity, "SI")?;
-        let unit_vec = used_units.iter().map(|(name, exp)| (unit_map().get(name).unwrap(), *exp)).collect_vec();
+    pub fn compose(units: &HashMap<&str, i32>, quantity: &Quantity) -> Self {
+        // TODO: Doesn't check that the unit map matches the quantity
+        let unit_vec = units.iter().map(|(name, exp)| (unit_map().get(name).unwrap(), *exp)).collect_vec();
         let si_scale  = unit_vec.iter().fold(1.0, |acc, (unit, exp)| acc * (unit.si_scale.powi(*exp)));
-        let name = Unit::get_unit_str(used_units);
-        Ok(Unit::new(&name, si_scale, quantity.clone()))
+        let name = Unit::get_unit_str(units);
+        Unit::new(&name, si_scale, quantity.clone())
     }
 
-    fn get_unit_str(units: HashMap<&str, i32>) -> String {
+    fn get_unit_str(units: &HashMap<&str, i32>) -> String {
         let mut unit = String::new();
         let mut seen_negatives = false;
         for (base_unit, power) in units.iter().sorted() {
@@ -243,6 +258,7 @@ impl Unit {
                 seen_negatives = true;
                 unit.push_str("/");
             }
+            // TODO: If there are only negative exponents, show them as negatives instead of /x
             let power = power.abs();
             if power == 1 {
                 unit.push_str(base_unit);
@@ -254,7 +270,7 @@ impl Unit {
     }
 
     /// Returns a map of string units and their exponents that summarize the given quantity
-    fn compile_used_units(quantity: &Quantity, system: &str) -> CResult<HashMap<&'static str, i32>> {
+    pub fn compile_used_units(quantity: &Quantity, system: &str) -> CResult<HashMap<&'static str, i32>> {
         let max_iter = 5;
         let system = &unit_system()[system];
         let mut avail_units = unit_map().clone();
@@ -263,7 +279,7 @@ impl Unit {
         let mut current_quantity = quantity.clone();
 
         while Unit::dimensionality(&current_quantity) != 0 && iterations < max_iter {
-            let mut best_unit = "";
+            let mut best_unit = ""; // TODO: Allow multiple potential matches (e.g. s and Hz)
             let mut best_match = 0;
             let mut remaining_quantity = current_quantity.clone();
             let mut exp = 0;
@@ -339,11 +355,6 @@ impl Unit {
         value / self.si_scale
     }
 
-    pub fn unit_scalar() -> Self {
-        Unit::new("", 1.0, Unit::scalar())
-    }
-
-    pub fn scalar() -> Quantity { vec![0, 0, 0, 0, 0, 0, 0] }
     pub fn length() -> Quantity { vec![1, 0, 0, 0, 0, 0, 0] }
     pub fn time() -> Quantity { vec![0, 1, 0, 0, 0, 0, 0] }
     pub fn frequency() -> Quantity { vec![0, -1, 0, 0, 0, 0, 0] }
@@ -377,14 +388,18 @@ fn unit_map() -> &'static HashMap<&'static str, Unit> {
         let mut m = HashMap::new();
         // m.insert("C", Unit::new("C", 272.15, 1.0, Unit::temp())); // Celsius
         // m.insert("F", Unit::new("F", 255.3722, 2.2, Unit::temp())); // Fahrenheit
-        m.insert("Pa", Unit::new("Pa", 1000.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
-        m.insert("N", Unit::new("N", 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
-        // m.insert("lbf", Unit::new("N", 1000.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("Pa", Unit::new("Pa", 1.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("psi", Unit::new("psi", 6894.757, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("bar", Unit::new("bar", 100000.0, vec![-1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("N", Unit::new("N", 1.0, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
+        m.insert("lbf", Unit::new("lbf", 4.448222, vec![1, -2, 1, 0, 0, 0, 0])); // Newton
         m.insert("m", Unit::new("m", 1.0, Unit::length())); // Meter
         m.insert("ft", Unit::new("ft", 0.3048, Unit::length())); // Meter
         m.insert("in", Unit::new("in", 0.0254, Unit::length())); // Meter
         m.insert("s", Unit::new("s", 1.0, Unit::time())); // Second
-        m.insert("g", Unit::new("g", 1.0, Unit::mass())); // Gram
+        m.insert("lb", Unit::new("lb", 0.4535924, Unit::mass())); // Gram
+        m.insert("kg", Unit::new("kg", 1.0, Unit::mass())); // Gram
+        m.insert("g", Unit::new("g", 0.001, Unit::mass())); // Gram
         m.insert("Hz", Unit::new("Hz", 1.0, Unit::frequency())); // Hertz
         m.insert("A", Unit::new("A", 1.0, Unit::current())); // Ampere
         m.insert("K", Unit::new("K", 1.0, Unit::temp())); // Kelvin
@@ -394,12 +409,13 @@ fn unit_map() -> &'static HashMap<&'static str, Unit> {
     })
 }
 
+/// Used to determine which units are shown in the UI
 fn unit_system() -> &'static HashMap<&'static str, Vec<&'static str>> {
     static HASHMAP: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
     HASHMAP.get_or_init(|| {
         let mut m = HashMap::new();
-        m.insert("SI", vec!["m", "s", "N", "g", "A", "K", "mol", "cd", "N", "Pa"]);
-        m.insert("US", vec!["ft", "s", "lb", "A", "K", "mol", "cd", "lbf", "psi"]);
+        m.insert("SI", vec!["m",  "s", "kg", "A", "K", "cd", "N", "Pa"]);
+        m.insert("US", vec!["ft", "s", "lb", "A", "K", "cd", "lbf"]);
         m
     })
 }
@@ -408,11 +424,14 @@ fn unit_system() -> &'static HashMap<&'static str, Vec<&'static str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{Span, Context};
+    use crate::evaluate_line;
 
     #[test]
     fn test_valid_unit() {
         for system in unit_system() {
             for unit in system.1 {
+                println!("Testing unit: {}", unit);
                 assert!(UnitVal::is_valid_unit(unit));
             }
         }
@@ -422,5 +441,35 @@ mod tests {
         assert!(UnitVal::is_valid_unit("mA"));
     }
 
+    #[test]
+    fn test_unit_identities() {
+        let tests = unit_system().get("SI").unwrap();
+        for base_unit in tests {
+            // Special case for kg, it handles prefixes differently
+            if *base_unit == "kg" {
+                assert_eq!(UnitVal::new_value(1.0, base_unit).to_string(), "1 kg");
+                continue;
+            }
+            for prefix in prefix_map() {
+                let unit_str = format!("{}{}", prefix.0, base_unit);
+                let val = UnitVal::new_value(1.0, &unit_str);
+                let expected = format!("1 {}", unit_str);
+                println!("{:?} = {}", val, expected);
+                assert_eq!(val.to_string(), expected);
+            }
+        }
+    }
 
+    #[test]
+    fn test_unit_conversions() {
+        let tests = vec![
+            ("1 N/kg", "1 m/s^2"),
+            ("1 kPa/N", "1000 /m^2"),
+        ];
+        for (input, expected) in tests {
+            let input = Span::new(input);
+            let response = evaluate_line(input, &mut Context::new()).unwrap().unwrap();
+            assert_eq!(response.to_string(), expected);
+        }
+    }
 }
