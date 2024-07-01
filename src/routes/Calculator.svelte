@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/tauri';
-    // https://icones.js.org/collection/material-symbols-light
-    import CalculatorRow from './CalculatorRow.svelte';
     import { listen } from '@tauri-apps/api/event'
+    import { toast } from '@zerodevx/svelte-toast';
+    import CalculatorRow from './CalculatorRow.svelte';
 
 	listen('open-file', (event: { event: String, payload: String }) => {
         latexes = event.payload?.split('\n') || [''];
+        toast.push("Opened file!");
 	})
 	listen('save-to-path', (event: { event: String, payload: String }) => {
         invoke('save_file', { path: event.payload, content: latexes.join('\n') });
+        toast.push("Saved Successfully!");
 	})
 
 	let latexes = [''];
