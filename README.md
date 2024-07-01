@@ -1,7 +1,7 @@
 # Dansmos!
 
 Daniel's Desmos. 
-Available for [Windows](dist/dansmos_0.1.0_x64-setup.exe) and [Mac](dist/dansmos_0.1.0_x64_en-US.msi)
+Available for [Windows](dist/dansmos_0.1.0_x64_en-US.msi)
 
 ![Example usage](content/example.png)
 
