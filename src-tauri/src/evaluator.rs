@@ -66,10 +66,7 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> CResult<
             }
         },
         EFunc(name, inputs) => {
-            let applied_defaulted_func = apply_default_function(name, inputs, context, defining);
-            if applied_defaulted_func.is_ok() {
-                applied_defaulted_func
-            } else if defining.is_some() && name == defining.unwrap() {
+            if defining.is_some() && name == defining.unwrap() {
                 Err(Error::EvalError(format!("Function '{name}' cannot be defined recursively")))
             } else if let Some((params, func_def)) = context.funcs.get(name) {
                 if params.len() != inputs.len() {
@@ -90,12 +87,12 @@ fn eval_expr(expr: &Expr, context: &Context, defining: Option<&str>) -> CResult<
     }
 }
 
-fn apply_default_function(name: &String, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> CResult<UnitVal> {
-    if inputs.len() > 1 {
-        return Err(Error::EvalError("Default functions only accept one argument".to_string()));
+fn apply_default_function(name: &str, inputs: &Vec<Expr>, context: &Context, defining: Option<&str>) -> CResult<UnitVal> {
+    if inputs.len() != 1 {
+        return Err(Error::EvalError(format!("Default functions only accept one argument, received {} for {name}", inputs.len())));
     }
     let input = eval_expr(inputs.get(0).unwrap(), context, defining)?;
-    let callable = match name.as_str() {
+    let callable = match name {
         "sin" => Some(Box::new(|x: f32| x.sin()) as Box<dyn Fn(f32) -> f32>),
         "cos" => Some(Box::new(|x: f32| x.cos()) as Box<dyn Fn(f32) -> f32>),
         "tan" => Some(Box::new(|x: f32| x.tan()) as Box<dyn Fn(f32) -> f32>),
@@ -112,6 +109,8 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CR
     let compose = |expr1: &Expr, expr2: &Expr, func: fn(UnitVal, UnitVal) -> UnitVal| {
         compose_expr(expr1, expr2, func, context, defining)
     };
+
+    println!("Evaluating latex expression: {:?}", expr);
 
     match expr.name.as_str() {
         "frac" => {
@@ -166,7 +165,12 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CR
             }
             Ok(UnitVal::scalar(sum))
         },
-        unknown_name => Err(Error::EvalError(format!("Unrecognized latex expression '{unknown_name}'")))
+        name => {
+            if expr.subscript.is_some() || expr.superscript.is_some() {
+                return Err(Error::EvalError(format!("Function {name} does not support subscripts or superscripts")));
+            }
+            apply_default_function(name, &expr.params, context, defining)
+        }
     }
 }
 

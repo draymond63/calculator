@@ -110,16 +110,13 @@ fn parse_func_call(input: Span) -> ParseResult {
 
 fn parse_call_params(input: Span) -> ParseResultVec {
     delimited(
-        alt((tag("("), tag("\\left"))), 
+        alt((tag("("), tag("\\left("))), 
         separated_list0(char(','), parse_math_expr), 
-        alt((tag(")"), tag("\\right"))), 
+        alt((tag(")"), tag("\\right)"))), 
     )(input)
 }
 
 fn parse_latex(input: Span) -> ParseResult {
-    if tag("\\cdot")(input).is_ok() {
-        return Err(nom::Err::Error(ParseError::new("Found ignored latex, skipping", input)))
-    }
     // println!("testing for latex: {:?}", input.fragment());
     let (rest, (_, func_name, script_params)) = tuple((
         char('\\'), alpha1, 
@@ -130,10 +127,15 @@ fn parse_latex(input: Span) -> ParseResult {
             ))
         )
     ))(input)?;
-    let (rest, params) = many0(
-        delimited(tag("{"), parse_math_expr, tag("}"))
-    )(rest)?;
-
+    // println!("found latex: {}", func_name.fragment());
+    let (rest, params) = alt((
+        parse_call_params,
+        many0(delimited(tag("{"), parse_math_expr, tag("}"))),
+    ))(rest)?;
+    // println!("params: {:?}", params);
+    if script_params.len() == 0 && params.len() == 0 {
+        return Err(nom::Err::Error(ParseError::new("No parameters given to latex function, ignoring", input)));
+    }
     let mut latex_expr = LatexExpr::new(func_name.fragment().to_string());
     for (script, expr) in script_params {
         match latex_expr.set_script_param(script, expr) {
