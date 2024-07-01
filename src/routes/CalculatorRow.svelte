@@ -70,7 +70,7 @@
             autofocus
         />
         {#if parsed_result.Ok}
-            <p>{parsed_result.Ok}</p>
+            <i>{@html parsed_result.Ok.replaceAll(/\^([0-9]+)/g, "<sup>$1</sup>")}</i>
         {:else if parsed_result.Err}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div class="error-container" on:mouseenter={() => show_error = true} on:mouseleave={() => show_error = false}>
@@ -121,6 +121,12 @@
         border: none;
         padding: 0;
         height: var(--icon-dim);
+    }
+
+    i {
+        width: max-content;
+        color: grey;
+        font-family: 'Times New Roman', Times, serif;
     }
 
     .icon {

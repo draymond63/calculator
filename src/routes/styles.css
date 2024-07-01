@@ -115,6 +115,6 @@ button:focus:not(:focus-visible) {
 
 
 .mathquill {
-	width: 100%;
+	flex: 1;
 	margin: 0;
 }
