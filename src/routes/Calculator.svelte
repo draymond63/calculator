@@ -2,6 +2,12 @@
 	import { invoke } from '@tauri-apps/api/tauri';
     // https://icones.js.org/collection/material-symbols-light
     import CalculatorRow from './CalculatorRow.svelte';
+    import { listen } from '@tauri-apps/api/event'
+
+	listen('open-file', (event: { event: String, payload: String }) => {
+        let content = event.payload;
+        latexes = content.split('\n');
+	})
 
 	let latexes = [''];
 	let results: any = [];
