@@ -128,7 +128,7 @@ fn parse_latex(input: Span) -> ParseResult {
         )
     ))(input)?;
     // println!("found latex: {}", func_name.fragment());
-    let (rest, params) = alt((
+    let (mut rest, mut params) = alt((
         parse_call_params,
         many0(delimited(tag("{"), parse_math_expr, tag("}"))),
     ))(rest)?;
@@ -136,14 +136,24 @@ fn parse_latex(input: Span) -> ParseResult {
     if script_params.len() == 0 && params.len() == 0 {
         return Err(nom::Err::Error(ParseError::new("No parameters given to latex function, ignoring", input)));
     }
-    let mut latex_expr = LatexExpr::new(func_name.fragment().to_string());
+    // If there was no sequence of parameters, then we there were no curly braces and the first term is a parameter
+    if params.len() == 0 {
+        let (new_rest, param) = parse_term(rest)?;
+        rest = new_rest;
+        params.push(param);
+    }
+    let mut latex_expr = LatexExpr {
+        name: func_name.fragment().to_string(),
+        params,
+        superscript: None,
+        subscript: None,
+    };
     for (script, expr) in script_params {
         match latex_expr.set_script_param(script, expr) {
             Ok(_) => (),
             Err(e) => return Err(nom::Err::Failure(ParseError::new(e, input)))
         }
     }
-    latex_expr.params = params;
     Ok((rest, ETex(latex_expr)))
 }
 

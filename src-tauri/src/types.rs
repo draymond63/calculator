@@ -33,15 +33,6 @@ pub struct LatexExpr {
 }
 
 impl LatexExpr {
-    pub fn new(name: String) -> Self {
-        LatexExpr {
-            name,
-            superscript: None,
-            subscript: None,
-            params: Vec::new(),
-        }
-    }
-
     pub fn set_script_param(&mut self, script: char, expr: Expr) -> Result<(), &str> {
         match script {
             '^' => self.superscript = {
