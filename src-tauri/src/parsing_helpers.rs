@@ -3,8 +3,8 @@ use crate::error::ParseError;
 
 
 use nom::character::complete::{alphanumeric1, space0};
-use nom::bytes::complete::take_until;
 use nom::branch::alt;
+use nom::sequence::delimited;
 
 
 
@@ -47,28 +47,10 @@ where
 }
 
 
-pub fn trim<'a, F>(f: F) -> impl Fn(Span<'a>) -> ParseResultStr<'a>
-where
-    F: Fn(Span<'a>) -> ParseResultStr<'a> + 'a,
+pub fn trim<'a, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResultStr<'a>
+    where F: Fn(Span<'a>) -> ParseResultStr<'a> + 'a,
 {
-    move |input| {
-        let (input, _) = alt((tag("\\ "), space0))(input)?;
-        let (input, res) = f(input)?;
-        let (input, _) = alt((tag("\\ "), space0))(input)?;
-        Ok((input, res))
-    }
-}
-
-pub fn unwrap(begin: &str, end: &str) -> impl Fn(Span) -> ParseResultStr
-{
-    let begin = begin.to_string();
-    let end = end.to_string();
-    move |input| {
-        let (input, _) = tag(&begin)(input)?;
-        let (input, res) = take_until(&end[..])(input)?;
-        let (input, _) = tag(&end)(input)?;
-        Ok((input, res))
-    }
+    delimited(alt((tag("\\ "), space0)), f, alt((tag("\\ "), space0)))
 }
 
 pub fn tag(s: &str) -> impl Fn(Span) -> ParseResultStr
@@ -78,18 +60,5 @@ pub fn tag(s: &str) -> impl Fn(Span) -> ParseResultStr
         let parser = nom::bytes::complete::tag(s.as_slice());
         let (input, res) = parser(input)?;
         Ok((input, res))
-    }
-}
-
-pub fn safe_unwrap(begin: &str, end: &str) -> impl Fn(Span) -> (Span, Span)
-{
-    let begin = begin.to_string();
-    let end = end.to_string();
-    move |input| {
-        let result: Result<(nom_locate::LocatedSpan<&str>, nom_locate::LocatedSpan<&str>), nom::Err<ParseError>> = unwrap(&begin, &end)(input);
-        match result {
-            Err(_) => (input, input),
-            _ => result.unwrap()
-        }
     }
 }

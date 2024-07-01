@@ -51,11 +51,11 @@ impl UnitVal {
 
         if let Some((_, numerator_unit_exp)) = numerator_units.get(0) {
             let val_exp = val.log10().floor() as i32;
+            // Reduce the exponent to the nearest multiple of 3
+            let val_exp = val_exp / 3 * 3;
             let reduced_val = val / 10.0_f32.powf(val_exp as f32);
             // Account for the exponent of the unit it's being applied to
             let val_exp = val_exp / *numerator_unit_exp;
-            // Reduce the exponent to the nearest multiple of 3
-            let val_exp = val_exp / 3 * 3;
             if let Some(prefix) = prefix_map().get_by_right(&val_exp) {
                 format!("{} {}{}", reduced_val, prefix, base_unit.name)
             } else {
@@ -145,7 +145,8 @@ impl UnitVal {
     }
 
     pub fn fract(&self) -> Result<f32, Error> {
-        let value = 1.0 / self.as_scalar()?;
+        println!("Var: {:?}", self.as_scalar());
+        let value = self.as_scalar()? % 1.0;
         Ok(value)
     }
 }
@@ -245,12 +246,12 @@ mod tests {
                 assert_eq!(UnitVal::new_value(1.0, base_unit).to_string(), "1 kg");
                 continue;
             }
-            for prefix in prefix_map() {
-                let unit_str = format!("{}{}", prefix.0, base_unit);
+            for (prefix, _) in prefix_map() {
+                let unit_str = format!("{}{}", prefix, base_unit);
                 let val = UnitVal::new_value(1.0, &unit_str);
                 let expected = format!("1 {}", unit_str);
-                println!("{:?} = {}", val, expected);
-                assert_eq!(val.to_string(), expected);
+                println!("(Expected) {} = {:?} (Received)", expected, val);
+                assert_eq!(expected, val.to_string());
             }
         }
     }

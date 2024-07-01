@@ -41,6 +41,25 @@ impl LatexExpr {
             params: Vec::new(),
         }
     }
+
+    pub fn set_script_param(&mut self, script: char, expr: Expr) -> Result<(), &str> {
+        match script {
+            '^' => self.superscript = {
+                if self.superscript.is_some() {
+                    return Err("Superscript already set");
+                }
+                Some(Box::new(expr))
+            },
+            '_' => self.subscript = {
+                if self.subscript.is_some() {
+                    return Err("Subscript already set");
+                }
+                Some(Box::new(expr))
+            },
+            _ => return Err("Unknown script type")
+        };
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

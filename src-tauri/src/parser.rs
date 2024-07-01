@@ -4,7 +4,7 @@ use crate::parsing_helpers::*;
 use crate::unit_value::UnitVal;
 
 use nom::branch::alt;
-use nom::character::complete::{char, digit1, space0};
+use nom::character::complete::{alpha1, char, digit1, space0};
 use nom::bytes::complete::take_until;
 use nom::combinator::map;
 use nom::multi::{many0, separated_list0};
@@ -109,71 +109,51 @@ fn parse_func_call(input: Span) -> ParseResult {
 }
 
 fn parse_call_params(input: Span) -> ParseResultVec {
-    let (rest, param_insides) = alt((
-        unwrap("(", ")"),
-        unwrap("\\left(", "\\right)"),
-    ))(input)?;
-    let (is_empty, params) = separated_list0(char(','), parse_math_expr)(param_insides)?;
-    if !is_empty.is_empty() {
-        return Err(nom::Err::Failure(ParseError::new("Call param input remain unparsed", is_empty)));
-    }
-    Ok((rest, params))
+    delimited(
+        alt((tag("("), tag("\\left"))), 
+        separated_list0(char(','), parse_math_expr), 
+        alt((tag(")"), tag("\\right"))), 
+    )(input)
 }
 
 fn parse_latex(input: Span) -> ParseResult {
-    // println!("testing for latex: {:?}", input.fragment());
-    let (rest, _) = char('\\')(input)?;
     if tag("\\cdot")(input).is_ok() {
         return Err(nom::Err::Error(ParseError::new("Found ignored latex, skipping", input)))
-    } 
-    // println!("found latex");
-    let (rest, name) = mcut(start_alpha, "Latex command must be followed by a name")(rest)?;
-    let mut latex_expr = LatexExpr::new(name.to_string());
-    let mut remaining_input = rest;
-    let mut found_params = false;
+    }
+    // println!("testing for latex: {:?}", input.fragment());
+    let (rest, (_, func_name, script_params)) = tuple((
+        char('\\'), alpha1, 
+        many0(
+            alt((
+                pair(char('^'), parse_latex_param(parse_math_expr)),
+                pair(char('_'), parse_latex_param(parse_math_expr_or_def)),
+            ))
+        )
+    ))(input)?;
+    let (rest, params) = many0(
+        delimited(tag("{"), parse_math_expr, tag("}"))
+    )(rest)?;
 
-    // println!("latex -> super: {:?}", remaining_input.fragment());
-    let superscript = parse_latex_param(remaining_input, '^', false);
-    if superscript.is_ok() {
-        (remaining_input, latex_expr.superscript) = superscript.unwrap();
-        found_params = true;
-    }
-    // println!("latex -> sub: {:?}", remaining_input.fragment());
-    let subscript = parse_latex_param(remaining_input, '_', true);
-    if subscript.is_ok() {
-        (remaining_input, latex_expr.subscript) = subscript.unwrap();
-        found_params = true;
-    }
-    let mut params = unwrap("{", "}")(remaining_input);
-    while params.is_ok() {
-        let (rest, inside) = params.unwrap();
-        // println!("latex param -> component: {:?}", inside.fragment());
-        let (_, expr) = prepend_cut(parse_math_expr, "In latex param")(inside)?;
-        latex_expr.params.push(expr);
-        params = unwrap("{", "}")(rest);
-        remaining_input = rest;
-        found_params = true;
-    }
-    if !found_params {
-        if let Ok(num) = match_const(name) {
-            return Ok((remaining_input, num));
-        } else {
-            return Err(nom::Err::Failure(ParseError::new("Latex command must have at least one parameter", input)));
+    let mut latex_expr = LatexExpr::new(func_name.fragment().to_string());
+    for (script, expr) in script_params {
+        match latex_expr.set_script_param(script, expr) {
+            Ok(_) => (),
+            Err(e) => return Err(nom::Err::Failure(ParseError::new(e, input)))
         }
     }
-    Ok((remaining_input, ETex(latex_expr)))
+    latex_expr.params = params;
+    Ok((rest, ETex(latex_expr)))
 }
 
 
-fn parse_latex_param(input: Span, c: char, allow_def: bool) -> BaseParseResult<Option<Box<Expr>>> {
-    let (input, _) = char(c)(input)?;
-    let (rest, inside) = safe_unwrap("{", "}")(input);
-    let (_, expr) = if allow_def {
-        prepend_cut(parse_math_expr_or_def, "In latex param")(inside)?
-    } else {
-        prepend_cut(parse_math_expr, "In latex param")(inside)?
-    };
-    Ok((rest, Some(Box::new(expr))))
+fn parse_latex_param<'a, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResult
+    where F: Fn(Span<'a>) -> ParseResult
+{
+    alt((
+        delimited(tag("{"), f, tag("}")),
+        parse_number,
+        parse_var_use,
+    ))
 }
 
 fn parse_number(input: Span) -> ParseResult {
@@ -372,9 +352,8 @@ mod tests {
             }
         );
         assert_eq!(parsed, expected);
-        // TODO: Allow superscript and subscript to be any order
-        // let parsed = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
-        // assert_eq!(parsed, expected);
+        let parsed = parse("\\sum_{i=1}^{3}{i}".into()).unwrap();
+        assert_eq!(parsed, expected);
     }
 
     #[test]
