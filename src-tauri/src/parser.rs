@@ -5,7 +5,8 @@ use crate::unit_value::UnitVal;
 
 use nom::branch::alt;
 use nom::character::complete::{alpha1, char, digit1, space0};
-use nom::bytes::complete::take_until;
+use nom::bytes::complete::{take, take_until};
+use nom::character::{is_alphabetic, is_digit};
 use nom::combinator::map;
 use nom::multi::{many0, separated_list0};
 use nom::sequence::{delimited, pair, tuple};
@@ -158,14 +159,23 @@ fn parse_latex(input: Span) -> ParseResult {
 }
 
 
-fn parse_latex_param<'a, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResult
-    where F: Fn(Span<'a>) -> ParseResult
+fn parse_latex_param<'a, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResult<'a>
+    where F: Fn(Span<'a>) -> ParseResult<'a> + Copy
 {
-    alt((
-        delimited(tag("{"), f, tag("}")),
-        parse_number,
-        parse_var_use,
-    ))
+    move |input: Span| {
+        let param = delimited(tag("{"), f, tag("}"))(input);
+        if param.is_ok() {
+            return param;
+        }
+        // Only one character is allowed if there are no brackets
+        let (rest, character) = take(1usize)(input)?;
+        let c_byte = character.fragment().as_bytes()[0];
+        match c_byte {
+            c_byte if is_digit(c_byte) => Ok((rest, parse_enum(character))),
+            c_byte if is_alphabetic(c_byte) => Ok((rest, parse_evar(character))),
+            _ => Err(nom::Err::Error(ParseError::new("Invalid character in latex script", character)))
+        }
+    }
 }
 
 fn parse_number(input: Span) -> ParseResult {
