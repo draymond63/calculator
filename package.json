@@ -1,6 +1,6 @@
 {
-	"name": "calculator",
-	"version": "0.0.1",
+	"name": "dansmos",
+	"version": "0.1.0",
 	"scripts": {
 		"tauri": "tauri",
 		"dev": "vite dev",
@@ -27,7 +27,6 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"@tauri-apps/api": "^1.5.6",
-		"desmos": "^1.5.4"
+		"@tauri-apps/api": "^1.5.6"
 	}
 }
