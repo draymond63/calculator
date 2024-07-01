@@ -6,7 +6,7 @@ use crate::{
   types::{Context, Span, CResult},
   parser::parse,
   unit_value::UnitVal,
-  menus::{get_menus, handle_menu_event},
+  menus::{save_file, get_menus, handle_menu_event},
 };
 
 use std::env;
@@ -78,7 +78,7 @@ fn main() {
     tauri::Builder::default()
       .menu(get_menus())
       .on_menu_event(handle_menu_event)
-      .invoke_handler(tauri::generate_handler![evaluate])
+      .invoke_handler(tauri::generate_handler![evaluate, save_file])
       .run(tauri::generate_context!())
       .expect("error while running tauri application");
   }

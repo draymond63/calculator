@@ -5,8 +5,10 @@
     import { listen } from '@tauri-apps/api/event'
 
 	listen('open-file', (event: { event: String, payload: String }) => {
-        let content = event.payload;
-        latexes = content.split('\n');
+        latexes = event.payload?.split('\n') || [''];
+	})
+	listen('save-to-path', (event: { event: String, payload: String }) => {
+        invoke('save_file', { path: event.payload, content: latexes.join('\n') });
 	})
 
 	let latexes = [''];

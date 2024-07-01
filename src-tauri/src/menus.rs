@@ -1,7 +1,7 @@
 
 use std::path::PathBuf;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 
 use tauri::{CustomMenuItem, Manager, Menu, Window, WindowMenuEvent};
 use tauri::api::dialog::FileDialogBuilder;
@@ -20,7 +20,7 @@ pub fn handle_menu_event(event: WindowMenuEvent) {
     let dialog = dialog.add_filter("Markdown", &["md"]);
     match menu_id {
         "open" => dialog.pick_file(move |file_path| open_file_on_ui(event.window(), file_path)),
-        "save" => dialog.save_file(save_file),
+        "save" => dialog.save_file(move |file_path| emit_file_save(event.window(), file_path)),
         _ => {}
     };
 }
@@ -36,14 +36,14 @@ fn open_file_on_ui(window: &Window, file_path: Option<PathBuf>) {
     }
 }
 
-fn save_file(file_path: Option<PathBuf>) {
+fn emit_file_save(window: &Window, file_path: Option<PathBuf>) {
     if let Some(file_path) = file_path {
-        // Read file contents
-        let mut file = File::open(file_path.clone()).expect("Unable to open file");
-        let mut file_contents = String::new();
-        file.read_to_string(&mut file_contents).expect("Unable to read file");
-        println!("Saving file contents to {:?}: {}", file_path, file_contents);
-        // Send event to tell frontend to save file (by calling a tauri command)?
-        // window.emit_all("open-file", file_contents).expect("Unable to send file contents to UI");
+        window.emit_all("save-to-path", file_path).expect("Unable to send file contents to UI");
     }
+}
+
+#[tauri::command]
+pub fn save_file(path: String, content: String) {
+    let mut file = File::create(path).expect("Unable to create file");
+    file.write_all(content.as_bytes()).expect("Unable to write to file");
 }
