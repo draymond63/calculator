@@ -134,36 +134,10 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CR
             Ok(eval_expr(val, context, defining)?.sqrt()?)
         },
         "sum" => {
-            if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
-                return Err(Error::EvalError(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr)));
-            }
-            let param = expr.params.get(0).unwrap();
-            let superscript = expr.superscript.as_ref().unwrap();
-            let subscript = expr.subscript.as_ref().unwrap();
-            let up = eval_expr(&superscript, context, defining)?;
-
-            let mut sum_context = context.clone();
-            let ub_var = match *subscript.clone() {
-                EDefVar(name, _) => Some(name),
-                _ => None,
-            };
-            let ub = eval_mut_context_def(&subscript, &mut sum_context, defining)?.unwrap();
-
-            // Ensure up and ub are integers
-            if up.fract()? != 0.0 || ub.fract()? != 0.0 {
-                return Err(Error::EvalError("Summation bounds must be integers".to_string()));
-            }
-            let up = up.as_scalar()? as i32 + 1;
-            let ub = ub.as_scalar()? as i32;
-
-            let mut sum = 0.0;
-            for i in ub..up {
-                if ub_var.is_some() {
-                    sum_context.vars.insert(ub_var.clone().unwrap(), UnitVal::scalar(i as f32));
-                }
-                sum += eval_expr(&param, &sum_context, defining)?.as_scalar()?;
-            }
-            Ok(UnitVal::scalar(sum))
+            evaluate_repetition(expr, context, defining, |a, b| a + b, 0.0)
+        },
+        "prod" => {
+            evaluate_repetition(expr, context, defining, |a, b| a * b, 1.0)
         },
         name => {
             if expr.subscript.is_some() || expr.superscript.is_some() {
@@ -172,6 +146,39 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CR
             apply_default_function(name, &expr.params, context, defining)
         }
     }
+}
+
+fn evaluate_repetition(expr: &LatexExpr, context: &Context, defining: Option<&str>, op: impl Fn(f32, f32) -> f32, identity: f32) -> Result<UnitVal, Error> {
+    if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
+        return Err(Error::EvalError(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr)));
+    }
+    let param = expr.params.get(0).unwrap();
+    let superscript = expr.superscript.as_ref().unwrap();
+    let subscript = expr.subscript.as_ref().unwrap();
+    let ub = eval_expr(&superscript, context, defining)?;
+
+    let mut sum_context = context.clone();
+    let lb_var = match *subscript.clone() {
+        EDefVar(name, _) => Some(name),
+        _ => None,
+    };
+    let lb = eval_mut_context_def(&subscript, &mut sum_context, defining)?.unwrap();
+
+    // Ensure up and ub are integers
+    if ub.fract()? != 0.0 || lb.fract()? != 0.0 {
+        return Err(Error::EvalError("Summation bounds must be integers".to_string()));
+    }
+    let up = ub.as_scalar()? as i32 + 1;
+    let ub = lb.as_scalar()? as i32;
+
+    let mut sum = identity;
+    for i in ub..up {
+        if lb_var.is_some() {
+            sum_context.vars.insert(lb_var.clone().unwrap(), UnitVal::scalar(i as f32));
+        }
+        sum = op(sum, eval_expr(&param, &sum_context, defining)?.as_scalar()?);
+    }
+    Ok(UnitVal::scalar(sum))
 }
 
 
