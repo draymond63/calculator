@@ -7,22 +7,22 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitVal {
-    pub value: f32,
+    pub value: f64,
     pub quantity: Quantity,
 }
 
 
 impl UnitVal {
-    pub fn new(value: f32, quantity: Quantity) -> Self {
+    pub fn new(value: f64, quantity: Quantity) -> Self {
         UnitVal { value, quantity }
     }
 
-    pub fn new_value(value: f32, unit: &str) -> Self {
+    pub fn new_value(value: f64, unit: &str) -> Self {
         if unit.is_empty() {
             return UnitVal::scalar(value);
         }
         let (exp, base_unit) = UnitVal::from_unit_str(unit).unwrap();
-        let scale_factor = 10.0_f32.powf(exp as f32);
+        let scale_factor = 10.0_f64.powf(exp as f64);
         let value = value * scale_factor;
         UnitVal::new(base_unit.to_si(value), base_unit.quantity.clone())
     }
@@ -53,7 +53,7 @@ impl UnitVal {
             let val_exp = val.log10().floor() as i32;
             // Reduce the exponent to the nearest multiple of 3
             let val_exp = val_exp / 3 * 3;
-            let reduced_val = val / 10.0_f32.powf(val_exp as f32);
+            let reduced_val = val / 10.0_f64.powf(val_exp as f64);
             // Account for the exponent of the unit it's being applied to
             let val_exp = val_exp / *numerator_unit_exp;
             if let Some(prefix) = prefix_map().get_by_right(&val_exp) {
@@ -106,7 +106,7 @@ impl UnitVal {
         UnitVal::new(self.value.powi(n), self.quantity.powi(n))
     }
 
-    pub fn scalar(value: f32) -> UnitVal { UnitVal::new(value, Quantity::unitless()) }
+    pub fn scalar(value: f64) -> UnitVal { UnitVal::new(value, Quantity::unitless()) }
 }
 
 
@@ -117,7 +117,7 @@ impl std::fmt::Display for UnitVal {
 }
 
 impl<'a> BaseField<'a> for UnitVal {
-    fn as_scalar(&self) -> Result<f32, Error> {
+    fn as_scalar(&self) -> Result<f64, Error> {
         if self.quantity != Quantity::unitless() {
             Err(Error::UnitError(format!("Cannot convert unit to scalar: {}", self)))
         } else {
@@ -126,7 +126,7 @@ impl<'a> BaseField<'a> for UnitVal {
     }
 
     fn powf(&self, exp: UnitVal) -> CResult<Self> {
-        let exp: f32 = exp.as_scalar()?;
+        let exp: f64 = exp.as_scalar()?;
         if exp.fract() == 0.0 {
             let exp = exp as i32;
             Ok(self.powi(exp))
@@ -141,14 +141,14 @@ impl<'a> BaseField<'a> for UnitVal {
 
     fn root(&self, n: i32) -> CResult<Self> {
         if let Ok(new_quantity) = self.quantity.clone().root(n) {
-            let exp = 1.0 / (n as f32);
+            let exp = 1.0 / (n as f64);
             Ok(UnitVal::new(self.value.powf(exp), new_quantity))
         } else {
             Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
         }
     }
 
-    fn fract(&self) -> Result<f32, Error> {
+    fn fract(&self) -> Result<f64, Error> {
         println!("Var: {:?}", self.as_scalar());
         let value = self.as_scalar()? % 1.0;
         Ok(value)
@@ -222,8 +222,8 @@ impl<'a> std::convert::TryFrom<&'a str> for UnitVal {
     }
 }
 
-impl std::convert::From<f32> for UnitVal {
-    fn from(value: f32) -> Self {
+impl std::convert::From<f64> for UnitVal {
+    fn from(value: f64) -> Self {
         UnitVal::scalar(value)
     }
 }

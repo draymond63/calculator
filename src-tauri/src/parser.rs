@@ -200,7 +200,7 @@ fn parse_enum<T>(parsed_num: Span) -> Expr<T> where for<'a> T: BaseField<'a> + '
 }
 
 fn into_enum<T>(parsed_num: &str) -> Expr<T> where for<'a> T: BaseField<'a> + 'a {
-    let num = f32::from_str(parsed_num).unwrap();
+    let num = f64::from_str(parsed_num).unwrap();
     ENum(num.into())
 }
 
@@ -221,8 +221,8 @@ fn match_unit<T>(input: Span) -> Result<Expr<T>, Box<dyn std::error::Error>> whe
 
 fn match_const<T>(input: Span) -> Result<Expr<T>, Box<dyn std::error::Error>> where for<'a> T: BaseField<'a> + 'a {
     match *input.fragment() {
-        "e" => Ok(ENum(std::f32::consts::E.into())),
-        "pi" => Ok(ENum(std::f32::consts::PI.into())),
+        "e" => Ok(ENum(std::f64::consts::E.into())),
+        "pi" => Ok(ENum(std::f64::consts::PI.into())),
         _ => Err(Box::new(ParseError::new("Unknown constant", input))),
     }
 }
@@ -257,11 +257,11 @@ mod tests {
     use super::*;
     use crate::unit_value::UnitVal;
 
-    fn num(x: f32) -> Expr<UnitVal> {
+    fn num(x: f64) -> Expr<UnitVal> {
         ENum(UnitVal::scalar(x))
     }
 
-    fn boxed_num(x: f32) -> Box<Expr<UnitVal>> {
+    fn boxed_num(x: f64) -> Box<Expr<UnitVal>> {
         Box::new(num(x))
     }
 

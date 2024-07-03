@@ -11,16 +11,16 @@ pub type CResult<T> = Result<T, Error>;
 pub trait BaseField<'a>: 
     std::fmt::Debug + Clone +
     std::convert::TryFrom<&'a str, Error=Box<dyn std::error::Error>> +
-    std::convert::From<f32> +
+    std::convert::From<f64> +
     std::ops::Add<Output = CResult<Self>> +
     std::ops::Sub<Output = CResult<Self>> +
     std::ops::Mul<Output = Self> +
     std::ops::Div<Output = Self>
 {
-    fn as_scalar(&self) -> CResult<f32>;
+    fn as_scalar(&self) -> CResult<f64>;
     fn powf(&self, exp: Self) -> CResult<Self>;
     fn root(&self, n: i32) -> CResult<Self>;
-    fn fract(&self) -> CResult<f32>;
+    fn fract(&self) -> CResult<f64>;
     fn sin(&self) -> CResult<Self>;
     fn cos(&self) -> CResult<Self>;
     fn tan(&self) -> CResult<Self>;

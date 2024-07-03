@@ -133,7 +133,7 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
         }
     }
 
-    fn evaluate_repetition(&self, expr: &LatexExpr<T>, op: impl Fn(f32, f32) -> f32, identity: f32) -> Result<T, Error> {
+    fn evaluate_repetition(&self, expr: &LatexExpr<T>, op: impl Fn(f64, f64) -> f64, identity: f64) -> Result<T, Error> {
         if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
             return Err(Error::EvalError(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr)));
         }
@@ -159,7 +159,7 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
         let mut sum = identity;
         for i in ub..up {
             if lb_var.is_some() {
-                sum_eval.context.vars.insert(lb_var.clone().unwrap(), (i as f32).into());
+                sum_eval.context.vars.insert(lb_var.clone().unwrap(), (i as f64).into());
             }
             sum = op(sum, sum_eval.eval_expr(&param)?.as_scalar()?);
         }
@@ -179,11 +179,11 @@ mod tests {
         eval.eval_expr_mut_context(&expr).unwrap().unwrap()
     }
 
-    fn num(x: f32) -> Expr<UnitVal> {
+    fn num(x: f64) -> Expr<UnitVal> {
         ENum(UnitVal::scalar(x))
     }
 
-    fn boxed_num(x: f32) -> Box<Expr<UnitVal>> {
+    fn boxed_num(x: f64) -> Box<Expr<UnitVal>> {
         Box::new(num(x))
     }
 
