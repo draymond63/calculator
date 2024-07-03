@@ -88,17 +88,12 @@ impl Evaluator {
         if inputs.len() != 1 {
             return Err(Error::EvalError(format!("Default functions only accept one argument, received {} for {name}", inputs.len())));
         }
-        let input = self.eval_expr(inputs.get(0).unwrap())?;
-        let callable = match name {
-            "sin" => Some(Box::new(|x: f32| x.sin()) as Box<dyn Fn(f32) -> f32>),
-            "cos" => Some(Box::new(|x: f32| x.cos()) as Box<dyn Fn(f32) -> f32>),
-            "tan" => Some(Box::new(|x: f32| x.tan()) as Box<dyn Fn(f32) -> f32>),
-            _ => None,
-        };
-        if let Some(callable) = callable {
-            Ok(UnitVal::scalar(callable(input.as_scalar()?)))
-        } else {
-            Err(Error::EvalError(format!("Function '{name}' not defined")))
+        let input = self.eval_expr(inputs.get(0).unwrap())?.as_scalar()?;
+        match name {
+            "sin" => Ok(UnitVal::scalar(input.sin())),
+            "cos" => Ok(UnitVal::scalar(input.cos())),
+            "tan" => Ok(UnitVal::scalar(input.tan())),
+            _ => Err(Error::EvalError(format!("Function '{name}' not defined")))
         }
     }
 
