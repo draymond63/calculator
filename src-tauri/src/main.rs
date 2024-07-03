@@ -83,3 +83,36 @@ fn main() {
       .expect("error while running tauri application");
   }
 }
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{Evaluator, Span, evaluate_line};
+
+    #[test]
+    fn valid_input() {
+        let valid_inputs = vec![
+            "(1 km^3 + 300 m^3)^(1/3)",
+            "f\\left(x\\right)=\\sum_{i=1}^3x^i",
+        ];
+        let mut eval = Evaluator::new();
+        for input in valid_inputs.into_iter() {      
+            let line = Span::new(&input);
+            evaluate_line(line, &mut eval).unwrap();
+        }
+    }
+
+    #[test]
+    fn invalid_input() {
+        let invalid_inputs = vec![
+            "f(2x)=x",
+        ];
+        let mut eval = Evaluator::new();
+        for input in invalid_inputs.into_iter() {      
+            let line = Span::new(&input);
+            evaluate_line(line, &mut eval).unwrap_err();
+        }
+    }
+}
