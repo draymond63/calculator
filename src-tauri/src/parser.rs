@@ -50,11 +50,14 @@ fn parse_def(input: Span) -> ParseResult {
     if lhs.contains('(') {
         let (_, params) = mcut(parse_call_params,"Invalid function parameters")(lhs)?;
         // Assert each params is just a Var and get the string that makes it
-        let params = params.into_iter().map(|expr| match expr {
-            EVar(var) => var,
-            _ => panic!("Unexpected expression in function definition"),
-        }).collect();
-        Ok((rhs, EDefFunc(var.to_string(), params, Box::new(expr))))
+        let mut param_strs = vec![String::from(""); params.len()];
+        for (i, param) in params.iter().enumerate() {
+            param_strs[i] = match param {
+                EVar(var) => var.clone(),
+                _ => return Err(nom::Err::Failure(ParseError::new("Unexpected expression in function definition", lhs))),
+            };
+        }
+        Ok((rhs, EDefFunc(var.to_string(), param_strs, Box::new(expr))))
     } else {
         Ok((rhs, EDefVar(var.to_string(), Box::new(expr))))
     }
