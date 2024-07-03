@@ -1,4 +1,4 @@
-use crate::types::{Span, ParseResultStr};
+use crate::types::{Span, BaseParseResult, ParseResultStr};
 use crate::error::ParseError;
 
 
@@ -47,8 +47,8 @@ where
 }
 
 
-pub fn trim<'a, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResultStr<'a>
-    where F: Fn(Span<'a>) -> ParseResultStr<'a> + 'a,
+pub fn trim<'a, O, F>(f: F) -> impl FnMut(Span<'a>) -> BaseParseResult<'a, O>
+    where F: FnMut(Span<'a>) -> BaseParseResult<'a, O> + 'a,
 {
     delimited(alt((tag("\\ "), space0)), f, alt((tag("\\ "), space0)))
 }

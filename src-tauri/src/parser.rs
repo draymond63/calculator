@@ -227,11 +227,11 @@ fn match_const(input: Span) -> Result<Expr, &str> {
 }
 
 fn parse_parens(input: Span) -> ParseResult {
-    delimited(
-        space0,
-        delimited(char('('), parse_math_expr, char(')')), // This is the recursive call
-        space0,
-    )(input)
+    trim(delimited(
+        alt((tag("("), tag("\\left("))), 
+        parse_math_expr,
+        alt((tag(")"), tag("\\right)"))), 
+    ))(input)
 }
 
 fn map_ops(expr: Expr, rem: Vec<(Span, Expr)>) -> Expr {
@@ -311,8 +311,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_expression_with_parantheses() {
-        let parsed = parse("(1 + 2) * 3".into()).unwrap();
+    fn test_parse_expression_with_parentheses() {
+        let parsed = parse("(1 + 2) * \\left(3\\right)".into()).unwrap();
         let expected = EMul(
             Box::new(EAdd(boxed_num(1.0), boxed_num(2.0))),
             boxed_num(3.0),
