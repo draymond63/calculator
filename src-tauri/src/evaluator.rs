@@ -131,7 +131,7 @@ fn eval_latex(expr: &LatexExpr, context: &Context, defining: Option<&str>) -> CR
                 return Err(Error::EvalError("Square root does not support subscripts or superscripts".to_string()));
             }
             let val = expr.params.get(0).unwrap();
-            Ok(eval_expr(val, context, defining)?.sqrt()?)
+            Ok(eval_expr(val, context, defining)?.root(2)?)
         },
         "sum" => {
             evaluate_repetition(expr, context, defining, |a, b| a + b, 0.0)

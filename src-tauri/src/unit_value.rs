@@ -121,27 +121,31 @@ impl UnitVal {
         }
     }
 
-    pub fn powf(&self, exp: UnitVal) -> Result<Self, Error> {
+    pub fn powf(&self, exp: UnitVal) -> CResult<Self> {
         let exp: f32 = exp.as_scalar()?;
         if exp.fract() == 0.0 {
             let exp = exp as i32;
             Ok(self.powi(exp))
+        } else if exp.abs() < 1.0 && (1.0 / exp).fract() == 0.0 {
+            let n  = (1.0 / exp) as i32;
+            self.root(n)
         } else {
             let value = self.as_scalar()?.powf(exp);
             Ok(UnitVal::scalar(value))
         }
     }
 
-    fn powi(&self, exp: i32) -> Self {
-        UnitVal {
-            value: self.value.powi(exp),
-            quantity: self.quantity.clone() * exp
-        }
+    fn powi(&self, n: i32) -> Self {
+        UnitVal::new(self.value.powi(n), self.quantity.powi(n))
     }
 
-    pub fn sqrt(&self) -> Result<Self, Error> {
-        let value = self.as_scalar()?.sqrt();
-        Ok(UnitVal::scalar(value))
+    pub fn root(&self, n: i32) -> CResult<Self> {
+        if let Ok(new_quantity) = self.quantity.clone().root(n) {
+            let exp = 1.0 / (n as f32);
+            Ok(UnitVal::new(self.value.powf(exp), new_quantity))
+        } else {
+            Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
+        }
     }
 
     pub fn fract(&self) -> Result<f32, Error> {

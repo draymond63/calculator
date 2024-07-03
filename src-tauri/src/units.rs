@@ -145,6 +145,19 @@ impl Quantity {
         possible_exps.iter().min().copied()
     }
 
+    pub fn powi(&self, n: i32) -> Self {
+        self.map(|a| a * n)
+    }
+
+    pub fn root(&self, n: i32) -> Result<Self, &str> {
+        for magnitude in self.quantity.iter() {
+            if magnitude % n != 0 {
+                return Err("Failed to take the root of a quantity");
+            }
+        }
+        Ok(self.map(|a| a / n))
+    }
+
     pub fn length() -> Self { Quantity::new(vec![1, 0, 0, 0, 0, 0, 0]) }
     pub fn time() -> Self { Quantity::new(vec![0, 1, 0, 0, 0, 0, 0]) }
     pub fn frequency() -> Self { Quantity::new(vec![0, -1, 0, 0, 0, 0, 0]) }
@@ -172,13 +185,6 @@ impl std::ops::Sub for Quantity {
     fn sub(self, rhs: Self) -> Self::Output {
         let quantity = self.quantity.iter().zip(rhs.quantity.iter()).map(|(a, b)| a - b).collect();
         Quantity::new(quantity)
-    }
-}
-impl std::ops::Mul<i32> for Quantity {
-    type Output = Self;
-
-    fn mul(self, exp: i32) -> Self::Output {
-        self.map(|a| a * exp)
     }
 }
 
