@@ -222,7 +222,8 @@ impl Serialize for UnitVal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Span, Context};
+    use crate::evaluator::Evaluator;
+    use crate::types::Span;
     use crate::evaluate_line;
 
     #[test]
@@ -269,7 +270,7 @@ mod tests {
         ];
         for (input, expected) in tests {
             let input = Span::new(input);
-            let response = evaluate_line(input, &mut Context::new()).unwrap().unwrap();
+            let response = evaluate_line(input,  &mut Evaluator::new()).unwrap().unwrap();
             assert_eq!(response.to_string(), expected);
         }
     }
@@ -283,7 +284,7 @@ mod tests {
         ];
         for (input, expected) in tests {
             let input = Span::new(input);
-            let response = evaluate_line(input, &mut Context::new()).unwrap().unwrap();
+            let response = evaluate_line(input, &mut Evaluator::new()).unwrap().unwrap();
             assert_eq!(response.to_string(), expected);
         }
     }

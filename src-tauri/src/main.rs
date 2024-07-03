@@ -2,8 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use crate::{
-  evaluator::eval_mut_context,
-  types::{Context, Span, CResult},
+  evaluator::Evaluator,
+  types::{Span, CResult},
   parser::parse,
   unit_value::UnitVal,
   menus::{save_file, get_menus, handle_menu_event},
@@ -27,16 +27,16 @@ mod menus;
 type EvalResult = CResult<Option<UnitVal>>;
 
 
-fn evaluate_line(line: nom_locate::LocatedSpan<&str>, context: &mut Context) -> EvalResult {
+fn evaluate_line(line: nom_locate::LocatedSpan<&str>, eval: &mut Evaluator) -> EvalResult {
     let expr = parse(line)?;
     println!("Parsed: {:?}", expr);
-    let eval = eval_mut_context(&expr, context)?;
+    let eval = eval.eval_expr_mut_context(&expr)?;
     println!("{} = {:?}", line.fragment(), eval);
     Ok(eval)
 }
 
 fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
-    let mut context = Context::new();
+    let mut eval = Evaluator::new();
     let mut results = vec![];
 
     for (i, input) in inputs.into_iter().enumerate() {      
@@ -45,7 +45,7 @@ fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
         } else {
             let line_num: u32 = (i + 1) as u32;
             let line = unsafe { Span::new_from_raw_offset(0, line_num, &input, ()) };
-            results.push(evaluate_line(line, &mut context));
+            results.push(evaluate_line(line, &mut eval));
         }
     }
     results
