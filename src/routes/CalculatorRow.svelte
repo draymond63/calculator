@@ -24,7 +24,7 @@
         if (!res) {
             parsed_result = {Ok: '', Err: ''};
         } else if ('Ok' in res) {
-            parsed_result = {Ok: res.Ok, Err: ''};
+            parsed_result = {Ok: String(res.Ok).replaceAll(/\^([0-9]+)/g, "<sup>$1</sup>"), Err: ''};
         } else if ('Err' in res) {
             parsed_result = {Ok: '', Err: parseError(res.Err)};
         } else {
@@ -70,7 +70,7 @@
             autofocus
         />
         {#if parsed_result.Ok}
-            <i>{@html parsed_result.Ok.replaceAll(/\^([0-9]+)/g, "<sup>$1</sup>")}</i>
+            <i>{@html parsed_result.Ok}</i>
         {:else if parsed_result.Err}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div class="error-container" on:mouseenter={() => show_error = true} on:mouseleave={() => show_error = false}>
