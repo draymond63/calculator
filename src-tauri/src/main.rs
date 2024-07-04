@@ -7,7 +7,7 @@ use crate::{
   evaluator::Evaluator,
   types::{Span, CResult},
   parser::parse,
-  unit_value::UnitVal,
+  fields::*,
   menus::{save_file, get_menus, handle_menu_event},
 };
 
@@ -20,8 +20,6 @@ mod evaluator;
 mod parser;
 mod parsing_helpers;
 mod types;
-mod unit_value;
-mod units;
 mod error;
 mod menus;
 mod fields;
@@ -61,13 +59,13 @@ async fn evaluate_units(input: &str) -> Result<Vec<EvalResult<UnitVal>>, ()> {
 }
 
 #[tauri::command]
-async fn evaluate_complex(input: &str) -> Result<Vec<EvalResult<fields::Complex>>, ()> {
+async fn evaluate_complex(input: &str) -> Result<Vec<EvalResult<Complex>>, ()> {
     let inputs = input.lines().collect::<Vec<&str>>();
     Ok(evaluate_sequence(inputs))
 }
 
 #[tauri::command]
-async fn evaluate_float(input: &str) -> Result<Vec<EvalResult<fields::Float>>, ()> {
+async fn evaluate_float(input: &str) -> Result<Vec<EvalResult<Float>>, ()> {
     let inputs = input.lines().collect::<Vec<&str>>();
     Ok(evaluate_sequence(inputs))
 }
@@ -105,7 +103,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use crate::{Evaluator, Span, evaluate_line};
-    use crate::unit_value::UnitVal;
+    use crate::fields::UnitVal;
 
     #[test]
     fn valid_input() {

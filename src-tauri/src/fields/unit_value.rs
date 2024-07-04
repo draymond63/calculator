@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::types::{BaseField, CResult};
-use crate::units::*;
+use crate::fields::units::*;
 
 use serde::Serialize;
 
@@ -97,7 +97,7 @@ impl UnitVal {
             let base_unit = unit_map().get(unit);
             match base_unit {
                 Some(q) => Ok((0, q.clone())),
-                None => Err(Error::DefinitionNotFoundError(base_unit.unwrap().name.clone()))
+                None => Err(Error::DefinitionNotFoundError(unit.to_string()))
             }
         }
     }

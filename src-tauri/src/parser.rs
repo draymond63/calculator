@@ -255,7 +255,7 @@ fn parse_op<T>(tup: (Span, Expr<T>), expr1: Expr<T>) -> Expr<T> where for<'a> T:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unit_value::UnitVal;
+    use crate::fields::UnitVal;
 
     fn num(x: f64) -> Expr<UnitVal> {
         ENum(UnitVal::scalar(x))

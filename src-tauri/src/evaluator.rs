@@ -171,7 +171,7 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unit_value::UnitVal;
+    use crate::fields::UnitVal;
 
 
     fn evaluate(expr: Expr<UnitVal>) -> UnitVal {
