@@ -4,6 +4,9 @@
     import { toast } from '@zerodevx/svelte-toast';
     import CalculatorRow from './CalculatorRow.svelte';
 
+
+    export let mode: 'float' | 'complex' | 'units' = 'float';
+
 	listen('open-file', (event: { event: String, payload: String }) => {
         latexes = event.payload?.split('\n') || [''];
         toast.push("Opened file!");
@@ -16,7 +19,7 @@
 	let latexes = [''];
 	let results: any = [];
 
-	$: latexes, invoke('evaluate', { input: latexes.join('\n') }).then((res: any) => {
+	$: latexes, invoke(`evaluate_${mode}`, { input: latexes.join('\n') }).then((res: any) => {
 		results = res;
 	}).catch((err) => {
 		console.error(err);

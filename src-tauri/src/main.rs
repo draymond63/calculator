@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use types::BaseField;
+
 use crate::{
   evaluator::Evaluator,
   types::{Span, CResult},
@@ -22,12 +24,13 @@ mod unit_value;
 mod units;
 mod error;
 mod menus;
+mod fields;
 
 
-type EvalResult = CResult<Option<UnitVal>>;
+type EvalResult<T> = CResult<Option<T>>;
 
 
-fn evaluate_line(line: nom_locate::LocatedSpan<&str>, eval: &mut Evaluator) -> EvalResult {
+fn evaluate_line<T>(line: Span, eval: &mut Evaluator<T>) -> EvalResult<T> where for<'a> T: BaseField<'a> + 'a {
     let expr = parse(line)?;
     println!("Parsed: {:?}", expr);
     let eval = eval.eval_expr_mut_context(&expr)?;
@@ -35,7 +38,7 @@ fn evaluate_line(line: nom_locate::LocatedSpan<&str>, eval: &mut Evaluator) -> E
     Ok(eval)
 }
 
-fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
+fn evaluate_sequence<T>(inputs: Vec<&str>) -> Vec<EvalResult<T>> where for<'a> T: BaseField<'a> + 'a {
     let mut eval = Evaluator::new();
     let mut results = vec![];
 
@@ -52,7 +55,19 @@ fn evaluate_sequence(inputs: Vec<&str>) -> Vec<EvalResult> {
 }
 
 #[tauri::command]
-async fn evaluate(input: &str) -> Result<Vec<EvalResult>, ()> {
+async fn evaluate_units(input: &str) -> Result<Vec<EvalResult<UnitVal>>, ()> {
+    let inputs = input.lines().collect::<Vec<&str>>();
+    Ok(evaluate_sequence(inputs))
+}
+
+#[tauri::command]
+async fn evaluate_complex(input: &str) -> Result<Vec<EvalResult<fields::Complex>>, ()> {
+    let inputs = input.lines().collect::<Vec<&str>>();
+    Ok(evaluate_sequence(inputs))
+}
+
+#[tauri::command]
+async fn evaluate_float(input: &str) -> Result<Vec<EvalResult<fields::Float>>, ()> {
     let inputs = input.lines().collect::<Vec<&str>>();
     Ok(evaluate_sequence(inputs))
 }
@@ -67,7 +82,7 @@ fn main() {
     let mut input_file_contents = String::new();
     test_file.read_to_string(&mut input_file_contents).unwrap();
     let inputs = input_file_contents.lines().collect::<Vec<&str>>();
-    for (i, result) in evaluate_sequence(inputs.clone()).iter().enumerate() {
+    for (i, result) in evaluate_sequence::<fields::Complex>(inputs.clone()).iter().enumerate() {
       if let Ok(Some(val)) = result {
         println!("{} = {}", inputs[i], val);
       } else if let Err(err) = result {
@@ -78,7 +93,7 @@ fn main() {
     tauri::Builder::default()
       .menu(get_menus())
       .on_menu_event(handle_menu_event)
-      .invoke_handler(tauri::generate_handler![evaluate, save_file])
+      .invoke_handler(tauri::generate_handler![evaluate_units, evaluate_complex, evaluate_float, save_file])
       .run(tauri::generate_context!())
       .expect("error while running tauri application");
   }
@@ -90,6 +105,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use crate::{Evaluator, Span, evaluate_line};
+    use crate::unit_value::UnitVal;
 
     #[test]
     fn valid_input() {
@@ -97,7 +113,7 @@ mod tests {
             "(1 km^3 + 300 m^3)^(1/3)",
             "f\\left(x\\right)=\\sum_{i=1}^3x^i",
         ];
-        let mut eval = Evaluator::new();
+        let mut eval = Evaluator::<UnitVal>::new();
         for input in valid_inputs.into_iter() {      
             let line = Span::new(&input);
             evaluate_line(line, &mut eval).unwrap();
@@ -108,8 +124,9 @@ mod tests {
     fn invalid_input() {
         let invalid_inputs = vec![
             "f(2x)=x",
+            "(1 km)^(1m)",
         ];
-        let mut eval = Evaluator::new();
+        let mut eval = Evaluator::<UnitVal>::new();
         for input in invalid_inputs.into_iter() {      
             let line = Span::new(&input);
             evaluate_line(line, &mut eval).unwrap_err();

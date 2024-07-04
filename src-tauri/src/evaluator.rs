@@ -1,22 +1,21 @@
-use crate::types::{Context, CResult, LatexExpr, Expr::{self, *}};
-use crate::unit_value::UnitVal;
+use crate::types::{BaseField, CResult, Context, Expr::{self, *}, LatexExpr};
 use crate::error::Error;
 
 use itertools::Itertools;
 
 
 #[derive(Debug, Clone)]
-pub struct Evaluator {
-    pub context: Context,
+pub struct Evaluator<T> where for<'a> T: BaseField<'a> {
+    pub context: Context<T>,
     pub defining: Option<String>,
 }
 
-impl Evaluator {
+impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
     pub fn new() -> Self {
         Evaluator { context: Context::new(), defining: None }
     }
 
-    pub fn eval_expr_mut_context(&mut self, expr: &Expr) -> CResult<Option<UnitVal>> {
+    pub fn eval_expr_mut_context(&mut self, expr: &Expr<T>) -> CResult<Option<T>> {
         match expr {
             EDefVar(var, expr) => {
                 if self.defining.is_some() {
@@ -45,7 +44,7 @@ impl Evaluator {
         }
     }
  
-    pub fn eval_expr(&self, expr: &Expr) -> CResult<UnitVal> {
+    pub fn eval_expr(&self, expr: &Expr<T>) -> CResult<T> {
     
         match expr {
             ENum(num) => Ok(num.clone()),
@@ -84,20 +83,20 @@ impl Evaluator {
         }
     }
 
-    fn apply_default_function(&self, name: &str, inputs: &Vec<Expr>) -> CResult<UnitVal> {
+    fn apply_default_function(&self, name: &str, inputs: &Vec<Expr<T>>) -> CResult<T> {
         if inputs.len() != 1 {
             return Err(Error::EvalError(format!("Default functions only accept one argument, received {} for {name}", inputs.len())));
         }
-        let input = self.eval_expr(inputs.get(0).unwrap())?.as_scalar()?;
+        let input = self.eval_expr(inputs.get(0).unwrap())?;
         match name {
-            "sin" => Ok(UnitVal::scalar(input.sin())),
-            "cos" => Ok(UnitVal::scalar(input.cos())),
-            "tan" => Ok(UnitVal::scalar(input.tan())),
+            "sin" => input.sin(),
+            "cos" => input.cos(),
+            "tan" => input.tan(),
             _ => Err(Error::EvalError(format!("Function '{name}' not defined")))
         }
     }
 
-    fn eval_latex(&self, expr: &LatexExpr) -> CResult<UnitVal> {
+    fn eval_latex(&self, expr: &LatexExpr<T>) -> CResult<T> {
         match expr.name.as_str() {
             "frac" => {
                 if expr.params.len() != 2 {
@@ -117,7 +116,7 @@ impl Evaluator {
                     return Err(Error::EvalError("Square root does not support subscripts or superscripts".to_string()));
                 }
                 let val = expr.params.get(0).unwrap();
-                Ok(self.eval_expr(val)?.root(2)?)
+                Ok(self.eval_expr(val)?.root(2.0.into())?)
             },
             "sum" => {
                 self.evaluate_repetition(expr, |a, b| a + b, 0.0)
@@ -134,7 +133,7 @@ impl Evaluator {
         }
     }
 
-    fn evaluate_repetition(&self, expr: &LatexExpr, op: impl Fn(f32, f32) -> f32, identity: f32) -> Result<UnitVal, Error> {
+    fn evaluate_repetition(&self, expr: &LatexExpr<T>, op: impl Fn(f64, f64) -> f64, identity: f64) -> Result<T, Error> {
         if expr.params.len() != 1 || expr.subscript.is_none() || expr.superscript.is_none() {
             return Err(Error::EvalError(format!("Summation expects a parameter, a subscript, and a superscript, received {:?}", expr)));
         }
@@ -142,7 +141,7 @@ impl Evaluator {
         let superscript = expr.superscript.as_ref().unwrap();
         let subscript = expr.subscript.as_ref().unwrap();
         let ub = self.eval_expr(&superscript)?;
-    
+
         let mut sum_eval = self.clone();
         let lb_var = match *subscript.clone() {
             EDefVar(name, _) => Some(name),
@@ -156,15 +155,15 @@ impl Evaluator {
         }
         let up = ub.as_scalar()? as i32 + 1;
         let ub = lb.as_scalar()? as i32;
-    
+
         let mut sum = identity;
         for i in ub..up {
             if lb_var.is_some() {
-                sum_eval.context.vars.insert(lb_var.clone().unwrap(), UnitVal::scalar(i as f32));
+                sum_eval.context.vars.insert(lb_var.clone().unwrap(), (i as f64).into());
             }
             sum = op(sum, sum_eval.eval_expr(&param)?.as_scalar()?);
         }
-        Ok(UnitVal::scalar(sum))
+        Ok(sum.into())
     }
 }
 
@@ -172,17 +171,19 @@ impl Evaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::unit_value::UnitVal;
 
-    fn evaluate(expr: Expr) -> UnitVal {
+
+    fn evaluate(expr: Expr<UnitVal>) -> UnitVal {
         let mut eval = Evaluator::new();
         eval.eval_expr_mut_context(&expr).unwrap().unwrap()
     }
 
-    fn num(x: f32) -> Expr {
+    fn num(x: f64) -> Expr<UnitVal> {
         ENum(UnitVal::scalar(x))
     }
 
-    fn boxed_num(x: f32) -> Box<Expr> {
+    fn boxed_num(x: f64) -> Box<Expr<UnitVal>> {
         Box::new(num(x))
     }
 

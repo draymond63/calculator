@@ -9,13 +9,13 @@ use std::{collections::HashMap, sync::OnceLock, vec};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
     pub name: String,
-    pub si_scale: f32,
+    pub si_scale: f64,
     pub quantity: Quantity,
     // TODO: Add optional max and min prefixes (e.g. can't have megametres)
 }
 
 impl Unit {
-    pub fn new(name: &str, si_scale: f32, quantity: Quantity) -> Self {
+    pub fn new(name: &str, si_scale: f64, quantity: Quantity) -> Self {
         Unit { name: name.to_string(), si_scale, quantity }
     }
 
@@ -85,11 +85,11 @@ impl Unit {
         }
     }
 
-    pub fn to_si(&self, value: f32) -> f32 {
+    pub fn to_si(&self, value: f64) -> f64 {
         value * self.si_scale
     }
 
-    pub fn from_si(&self, value: f32) -> f32 {
+    pub fn from_si(&self, value: f64) -> f64 {
         value / self.si_scale
     }
 }

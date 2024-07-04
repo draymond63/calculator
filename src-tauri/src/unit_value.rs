@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::types::CResult;
+use crate::types::{BaseField, CResult};
 use crate::units::*;
 
 use serde::Serialize;
@@ -7,22 +7,22 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitVal {
-    pub value: f32,
+    pub value: f64,
     pub quantity: Quantity,
 }
 
 
 impl UnitVal {
-    pub fn new(value: f32, quantity: Quantity) -> Self {
+    pub fn new(value: f64, quantity: Quantity) -> Self {
         UnitVal { value, quantity }
     }
 
-    pub fn new_value(value: f32, unit: &str) -> Self {
+    pub fn new_value(value: f64, unit: &str) -> Self {
         if unit.is_empty() {
             return UnitVal::scalar(value);
         }
         let (exp, base_unit) = UnitVal::from_unit_str(unit).unwrap();
-        let scale_factor = 10.0_f32.powf(exp as f32);
+        let scale_factor = 10.0_f64.powf(exp as f64);
         let value = value * scale_factor;
         UnitVal::new(base_unit.to_si(value), base_unit.quantity.clone())
     }
@@ -53,7 +53,7 @@ impl UnitVal {
             let val_exp = val.log10().floor() as i32;
             // Reduce the exponent to the nearest multiple of 3
             let val_exp = val_exp / 3 * 3;
-            let reduced_val = val / 10.0_f32.powf(val_exp as f32);
+            let reduced_val = val / 10.0_f64.powf(val_exp as f64);
             // Account for the exponent of the unit it's being applied to
             let val_exp = val_exp / *numerator_unit_exp;
             if let Some(prefix) = prefix_map().get_by_right(&val_exp) {
@@ -102,7 +102,11 @@ impl UnitVal {
         }
     }
 
-    pub fn scalar(value: f32) -> UnitVal { UnitVal::new(value, Quantity::unitless()) }
+    fn powi(&self, n: i32) -> Self {
+        UnitVal::new(self.value.powi(n), self.quantity.powi(n))
+    }
+
+    pub fn scalar(value: f64) -> UnitVal { UnitVal::new(value, Quantity::unitless()) }
 }
 
 
@@ -112,8 +116,8 @@ impl std::fmt::Display for UnitVal {
     }
 }
 
-impl UnitVal {
-    pub fn as_scalar(&self) -> Result<f32, Error> {
+impl<'a> BaseField<'a> for UnitVal {
+    fn as_scalar(&self) -> Result<f64, Error> {
         if self.quantity != Quantity::unitless() {
             Err(Error::UnitError(format!("Cannot convert unit to scalar: {}", self)))
         } else {
@@ -121,37 +125,46 @@ impl UnitVal {
         }
     }
 
-    pub fn powf(&self, exp: UnitVal) -> CResult<Self> {
-        let exp: f32 = exp.as_scalar()?;
+    fn powf(&self, exp: UnitVal) -> CResult<Self> {
+        let exp: f64 = exp.as_scalar()?;
         if exp.fract() == 0.0 {
             let exp = exp as i32;
             Ok(self.powi(exp))
         } else if exp.abs() < 1.0 && (1.0 / exp).fract() == 0.0 {
-            let n  = (1.0 / exp) as i32;
-            self.root(n)
+            let n  = 1.0 / exp;
+            self.root(UnitVal::scalar(n))
         } else {
             let value = self.as_scalar()?.powf(exp);
             Ok(UnitVal::scalar(value))
         }
     }
 
-    fn powi(&self, n: i32) -> Self {
-        UnitVal::new(self.value.powi(n), self.quantity.powi(n))
-    }
-
-    pub fn root(&self, n: i32) -> CResult<Self> {
-        if let Ok(new_quantity) = self.quantity.clone().root(n) {
-            let exp = 1.0 / (n as f32);
+    fn root(&self, n: Self) -> CResult<Self> {
+        let n = n.as_scalar()?;
+        if n.fract() != 0.0 {
+            Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
+        } else if let Ok(new_quantity) = self.quantity.clone().root(n as i32) {
+            let exp = 1.0 / n;
             Ok(UnitVal::new(self.value.powf(exp), new_quantity))
         } else {
             Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
         }
     }
 
-    pub fn fract(&self) -> Result<f32, Error> {
+    fn fract(&self) -> Result<f64, Error> {
         println!("Var: {:?}", self.as_scalar());
         let value = self.as_scalar()? % 1.0;
         Ok(value)
+    }
+
+    fn sin(&self) -> CResult<Self> {
+        Ok(UnitVal::scalar(self.as_scalar()?.sin()))
+    }
+    fn cos(&self) -> CResult<Self> {
+        Ok(UnitVal::scalar(self.as_scalar()?.cos()))
+    }
+    fn tan(&self) -> CResult<Self> {
+        Ok(UnitVal::scalar(self.as_scalar()?.tan()))
     }
 }
 
@@ -187,15 +200,6 @@ impl std::ops::Add for UnitVal {
     }
 }
 
-impl std::ops::AddAssign for UnitVal {
-    fn add_assign(&mut self, rhs: Self) {
-        if self.quantity != rhs.quantity {
-            panic!("Cannot add units with different quantities: {:?} and {:?}", self.to_string(), rhs.to_string())
-        }
-        self.value += rhs.value;
-    }
-}
-
 impl std::ops::Sub for UnitVal {
     type Output = CResult<Self>;
 
@@ -206,6 +210,24 @@ impl std::ops::Sub for UnitVal {
         let value = self.value - rhs.value;
         let quantity = self.quantity;
         Ok(UnitVal { value, quantity })
+    }
+}
+
+impl<'a> std::convert::TryFrom<&'a str> for UnitVal {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        if UnitVal::is_valid_unit(value) {
+            Ok(UnitVal::new_identity(value))
+        } else {
+            Err(Box::new(Error::UnitError(format!("Invalid unit: {value}"))))
+        }
+    }
+}
+
+impl std::convert::From<f64> for UnitVal {
+    fn from(value: f64) -> Self {
+        UnitVal::scalar(value)
     }
 }
 
@@ -270,7 +292,7 @@ mod tests {
         ];
         for (input, expected) in tests {
             let input = Span::new(input);
-            let response = evaluate_line(input,  &mut Evaluator::new()).unwrap().unwrap();
+            let response = evaluate_line(input,  &mut Evaluator::<UnitVal>::new()).unwrap().unwrap();
             assert_eq!(response.to_string(), expected);
         }
     }
@@ -284,7 +306,7 @@ mod tests {
         ];
         for (input, expected) in tests {
             let input = Span::new(input);
-            let response = evaluate_line(input, &mut Evaluator::new()).unwrap().unwrap();
+            let response = evaluate_line(input, &mut Evaluator::<UnitVal>::new()).unwrap().unwrap();
             assert_eq!(response.to_string(), expected);
         }
     }
