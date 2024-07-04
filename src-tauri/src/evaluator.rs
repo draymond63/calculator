@@ -116,7 +116,7 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
                     return Err(Error::EvalError("Square root does not support subscripts or superscripts".to_string()));
                 }
                 let val = expr.params.get(0).unwrap();
-                Ok(self.eval_expr(val)?.root(2)?)
+                Ok(self.eval_expr(val)?.root(2.0.into())?)
             },
             "sum" => {
                 self.evaluate_repetition(expr, |a, b| a + b, 0.0)

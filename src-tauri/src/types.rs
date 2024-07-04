@@ -10,6 +10,8 @@ pub type CResult<T> = Result<T, Error>;
 
 pub trait BaseField<'a>: 
     std::fmt::Debug + Clone +
+    std::fmt::Display +
+    serde::Serialize +
     std::convert::TryFrom<&'a str, Error=Box<dyn std::error::Error>> +
     std::convert::From<f64> +
     std::ops::Add<Output = CResult<Self>> +
@@ -19,7 +21,7 @@ pub trait BaseField<'a>:
 {
     fn as_scalar(&self) -> CResult<f64>;
     fn powf(&self, exp: Self) -> CResult<Self>;
-    fn root(&self, n: i32) -> CResult<Self>;
+    fn root(&self, n: Self) -> CResult<Self>;
     fn fract(&self) -> CResult<f64>;
     fn sin(&self) -> CResult<Self>;
     fn cos(&self) -> CResult<Self>;

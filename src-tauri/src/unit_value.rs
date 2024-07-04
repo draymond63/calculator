@@ -131,17 +131,20 @@ impl<'a> BaseField<'a> for UnitVal {
             let exp = exp as i32;
             Ok(self.powi(exp))
         } else if exp.abs() < 1.0 && (1.0 / exp).fract() == 0.0 {
-            let n  = (1.0 / exp) as i32;
-            self.root(n)
+            let n  = 1.0 / exp;
+            self.root(UnitVal::scalar(n))
         } else {
             let value = self.as_scalar()?.powf(exp);
             Ok(UnitVal::scalar(value))
         }
     }
 
-    fn root(&self, n: i32) -> CResult<Self> {
-        if let Ok(new_quantity) = self.quantity.clone().root(n) {
-            let exp = 1.0 / (n as f64);
+    fn root(&self, n: Self) -> CResult<Self> {
+        let n = n.as_scalar()?;
+        if n.fract() != 0.0 {
+            Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
+        } else if let Ok(new_quantity) = self.quantity.clone().root(n as i32) {
+            let exp = 1.0 / n;
             Ok(UnitVal::new(self.value.powf(exp), new_quantity))
         } else {
             Err(Error::UnitError(format!("Cannot take the {n}th root of {self}")))
