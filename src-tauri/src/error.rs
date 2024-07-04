@@ -8,6 +8,8 @@ use nom;
 pub enum Error {
     #[error(transparent)]
     ParseError(#[from] ParseError),
+    #[error("Unable to define: {0}")]
+    DefinitionNotFoundError(String),
     #[error("evaluation error: {0}")]
     EvalError(String),
     #[error("unit error: {0}")]

@@ -5,21 +5,22 @@
     import CalculatorRow from './CalculatorRow.svelte';
 
 
-    export let mode: 'float' | 'complex' | 'units' = 'float';
-
 	listen('open-file', (event: { event: String, payload: String }) => {
         latexes = event.payload?.split('\n') || [''];
         toast.push("Opened file!");
 	})
 	listen('save-to-path', (event: { event: String, payload: String }) => {
+        // TODO: Check promise from this invoke
         invoke('save_file', { path: event.payload, content: latexes.join('\n') });
-        toast.push("Saved Successfully!");
+        toast.push("Saved successfully!");
 	})
 
+    let mode: 'float' | 'complex' | 'units' = 'float';
 	let latexes = [''];
 	let results: any = [];
+    let has_auto_updated_mode = false;
 
-	$: latexes, invoke(`evaluate_${mode}`, { input: latexes.join('\n') }).then((res: any) => {
+	$: (mode, latexes), invoke(`evaluate_${mode}`, { input: latexes.join('\n') }).then((res: any) => {
 		results = res;
 	}).catch((err) => {
 		console.error(err);
@@ -42,6 +43,14 @@
             latexes = latexes.filter((_, i) => i !== index);
         }
     }
+
+    function updateMode(new_mode:  'complex' | 'units') {
+        if (!has_auto_updated_mode) {
+            mode = new_mode;
+            toast.push(`Switched to ${new_mode} mode!`);
+            has_auto_updated_mode = true;
+        }
+    }
 </script>
 
 <section>
@@ -51,6 +60,7 @@
             bind:latex="{latex}"
             result={results[index]}
             is_last={index == latexes.length - 1}
+            on:detectMode={(e) => updateMode(e.detail.mode)}
             on:enter={addRow}
             on:focusUp={() => focusRow(index - 1)}
             on:focusDown={() => focusRow(index + 1)}

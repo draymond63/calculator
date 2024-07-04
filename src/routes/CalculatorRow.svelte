@@ -37,7 +37,23 @@
         if ('ParseError' in err) return err.ParseError.message + `: '${err.ParseError.span.fragment}'`;
         else if ('EvalError' in err) return err.EvalError;
         else if ('UnitError' in err) return err.UnitError;
+        else if ('DefinitionNotFoundError' in err) {
+            detectMode(err.DefinitionNotFoundError);
+            return `Definition not found: '${err.DefinitionNotFoundError}'`;
+        }
         else return JSON.stringify(err);
+    }
+
+    function detectMode(missing_def: string) {
+        if (missing_def == 'i') {
+            fire('detectMode', {mode: 'complex'});
+        } else if ([
+            'm', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr', 'Hz', 'N',
+            'Pa', 'J', 'W', 'C', 'V', 'F', 'Ω', 'S', 'Wb', 'T', 'H', 'lm',
+            'lx', 'Bq', 'Gy', 'Sv', 'kat', 'ft', 'in', 'yd',
+        ].includes(missing_def)) {
+            fire('detectMode', {mode: 'units'});
+        }
     }
 
     function copyClipboard(line: string) {

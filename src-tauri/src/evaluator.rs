@@ -59,7 +59,7 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
                 } else if let Some(val) = self.context.vars.get(var) {
                     Ok(val.clone())
                 } else {
-                    Err(Error::EvalError(format!("Variable '{var}' not defined")))
+                    Err(Error::DefinitionNotFoundError(var.clone()))
                 }
             },
             EFunc(name, inputs) => {
@@ -75,11 +75,11 @@ impl<T> Evaluator<T> where for<'a> T: BaseField<'a> {
                     }
                     sub_eval.eval_expr(func_def)
                 } else {
-                    Err(Error::EvalError(format!("Function '{name}' not defined")))
+                    Err(Error::DefinitionNotFoundError(name.clone()))
                 }
             },
             ETex(expr) => self.eval_latex(expr),
-            _ => Err(Error::EvalError(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_mut_context_def`?")),)
+            _ => Err(Error::EvalError(format!("Unexpected expression '{expr:?}'. Did you mean to call `eval_expr_mut_context`?")),)
         }
     }
 
