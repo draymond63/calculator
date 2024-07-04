@@ -91,13 +91,13 @@ impl UnitVal {
             match (exp, base_unit) {
                 (Some(e), Some(q)) => Ok((e.clone(), q.clone())),
                 (None, _) => Err(Error::UnitError(format!("Invalid unit prefix '{prefix}'"))),
-                (_, None) => Err(Error::UnitError(format!("Invalid base unit '{unit_shorthand}'")))
+                (_, None) => Err(Error::DefinitionNotFoundError(unit_shorthand.to_string()))
             }
         } else {
             let base_unit = unit_map().get(unit);
             match base_unit {
                 Some(q) => Ok((0, q.clone())),
-                None => Err(Error::UnitError(format!("Invalid base unit '{unit}'")))
+                None => Err(Error::DefinitionNotFoundError(base_unit.unwrap().name.clone()))
             }
         }
     }
