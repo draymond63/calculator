@@ -229,9 +229,9 @@ fn match_const<T>(input: Span) -> Result<Expr<T>, Box<dyn std::error::Error>> wh
 
 fn parse_parens<T>(input: Span) -> ParseResult<T> where for<'a> T: BaseField<'a> + 'a {
     trim(delimited(
-        alt((tag("("), tag("\\left("))), 
+        alt((tag("("), tag("\\left("), tag("{"))), 
         parse_math_expr,
-        alt((tag(")"), tag("\\right)"))), 
+        alt((tag(")"), tag("\\right)"), tag("}"))), 
     ))(input)
 }
 
